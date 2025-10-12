@@ -1,10 +1,13 @@
 //! The core AST types.
 
-pub use crate::ast::Span;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter, Write};
 use std::hash::Hash;
+
+use unicode_ident::{is_xid_continue, is_xid_start};
+
+pub use crate::ast::Span;
 
 #[derive(Copy, Clone)]
 pub struct Spanned<T> {
@@ -52,13 +55,6 @@ impl<T> From<(T, Span)> for Spanned<T> {
 macro_rules! impl_string_wrapper {
     ($target:ident) => {
         impl $target {
-            #[inline]
-            pub fn new(text: impl Into<String>, span: Span) -> $target {
-                $target {
-                    text: text.into(),
-                    span,
-                }
-            }
             #[inline]
             pub fn text(&self) -> &'_ str {
                 &self.text
@@ -121,6 +117,34 @@ pub struct Ident {
     text: String,
     span: Span,
 }
+impl Ident {
+    #[inline]
+    #[track_caller]
+    pub fn new(text: impl Into<String>, span: Span) -> Self {
+        let text = text.into();
+        let invalid_char = |c: char| panic!("Invalid char {c:?} at {span:?}");
+        let mut chars = text.chars();
+        let first = chars
+            .next()
+            .unwrap_or_else(|| panic!("Identifier is empty at {span:?}"));
+        if !is_xid_start(first) {
+            invalid_char(first)
+        }
+        for other in chars {
+            if !is_xid_continue(other) {
+                invalid_char(other)
+            }
+        }
+        if let Ok(byte_len) = span.byte_len() {
+            assert_eq!(
+                byte_len,
+                text.len() as u64,
+                "Length of span {span} doesn't match {text:?}"
+            )
+        }
+        Ident { text, span }
+    }
+}
 impl_string_wrapper!(Ident);
 impl Display for Ident {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -133,6 +157,15 @@ impl Display for Ident {
 pub struct StringLiteral {
     text: String,
     span: Span,
+}
+impl StringLiteral {
+    #[inline]
+    pub fn new(text: impl Into<String>, span: Span) -> Self {
+        StringLiteral {
+            text: text.into(),
+            span,
+        }
+    }
 }
 impl_string_wrapper!(StringLiteral);
 impl Display for StringLiteral {
