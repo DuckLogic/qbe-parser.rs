@@ -2,12 +2,12 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::ops::Range;
+use std::ops::{Bound, Deref, Range, RangeBounds};
 
 /// An error that occurs when a [`Location`] or [`Span`] is missing.
 ///
 /// See [`Location::MISSING`] and [`Span::MISSING`] for more details.
-#[derive(Copy, Clone, Debug, thiserror::Error)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("Missing location information")]
 pub struct MissingLocationError;
 
@@ -18,8 +18,14 @@ pub struct MissingLocationError;
 /// with [`Location::MISSING`] coming after every valid location.
 #[derive(Copy, Clone)]
 pub struct Location {
-    // Should really be `Option<NonMax>`.
-    // Once NonMax becomes stable, this will become public
+    /// This field is either the byte offset or [`u64::MAX`] if the span is unknown.
+    ///
+    /// While the main reason for this representation is efficiency,
+    /// it also means that [`Span::byte_len`] can never overflow.
+    ///
+    /// This field should really be of type `Option<NonMax>`,
+    /// but that is not possible to properly express without pattern types.
+    /// Until this feature becomes stable, it should remain private.
     byte_offset: u64,
 }
 impl Location {
@@ -213,6 +219,96 @@ impl Span {
     #[inline]
     pub fn byte_range(&self) -> Result<Range<u64>, MissingLocationError> {
         Ok(self.start.byte_offset()?..self.end.byte_offset()?)
+    }
+
+    /// Returns the length of the span in bytes,
+    /// or a [`MissingLocationError`] if missing.
+    #[inline]
+    pub fn byte_len(&self) -> Result<u64, MissingLocationError> {
+        // NOTE: Overflow is impossible since end cannot be u64::MAX
+        Ok(self.end.byte_offset()? - self.start.byte_offset()?)
+    }
+
+    /// Slice the bytes indices this span, returning a subset of its indexes.
+    ///
+    /// If the original span is [missing](Span::MISSING), the result will be too.
+    ///
+    /// # Panics
+    /// Referencing an index that exceeds the byte length of this span will trigger a panic.
+    /// This will also panic If the start of the range exceeds the end of the range,
+    ///
+    /// # Examples
+    /// ```
+    /// use qbe_parser::ast::Span;
+    /// let x = Span::from_byte_range::<u32>(5..20);
+    /// assert_eq!(
+    ///     x.slice_byte_indexes(2..).byte_range(),
+    ///     Ok(7..20)
+    /// );
+    /// assert_eq!(
+    ///     x.slice_byte_indexes(3..5).byte_range(),
+    ///     Ok(8..10)
+    /// );
+    /// assert_eq!(
+    ///     x.slice_byte_indexes(3..=5).byte_range(),
+    ///     Ok(8..11)
+    /// );
+    /// ```
+    /// The following code will panic due to referencing an out-of-bounds indexes.
+    /// ```should_panic
+    /// use qbe_parser::ast::Span;
+    /// let x = Span::from_byte_range::<u32>(5..20);
+    /// assert_eq!(x.byte_len(), Ok(15));
+    /// x.slice_byte_indexes(100..); // panics
+    /// ```
+    #[track_caller]
+    pub fn slice_byte_indexes<R>(self, range: R) -> Self
+    where
+        R: RangeBounds<u64> + Debug,
+    {
+        let old_byte_range = match self.byte_range() {
+            Ok(range) => range,
+            Err(MissingLocationError) => return Self::MISSING,
+        };
+        let byte_len = self.byte_len().unwrap();
+        let start_offset = match range.start_bound() {
+            Bound::Included(&start) => Some(start),
+            Bound::Excluded(&start) => start.checked_add(1),
+            Bound::Unbounded => Some(0),
+        }
+        .unwrap_or_else(|| panic!("Start of range overflowed a Location: {range:?}"));
+        let end_offset = match range.end_bound() {
+            Bound::Included(&end) => end.checked_add(1),
+            Bound::Excluded(&end) => Some(end),
+            Bound::Unbounded => {
+                // We check `start <= end` first to avoid a `start_offset <= byte_len` check.
+                // A naive implementation returning `byte_len` when `end_bound = Bound::Unbounded`
+                // would give an inaccurate error message when `start_index` overflows the len.
+                // It would claim that issue is `start > end` when the real issue is `start > len`
+                //
+                // To avoid this we insert a `max` operation ,
+                // making the first check pass in this case but still failing the second check.
+                Some(byte_len.max(start_offset))
+            }
+        }
+        .unwrap_or_else(|| panic!("End of range overflowed a Location: {range:?}"));
+        // This catches a more serious issue than the bounds check does.
+        // A range with end >= start is always invalid,
+        // while a range with an index oob can in other contexts be valid.
+        assert!(
+            start_offset <= end_offset,
+            "Invalid range has start > end: {range:?}"
+        );
+        // Can omit `start_offset <= byte_len` check due to the above check
+        // that `start <= end` and our careful handling of `end == Unbounded`.
+        assert!(
+            end_offset <= byte_len,
+            "Range overflows {self:?} ({byte_len} bytes): {range:?}"
+        );
+        // NOTE: Overflow should not be possible here
+        let new_byte_range =
+            (old_byte_range.start + start_offset)..(old_byte_range.start + end_offset);
+        Self::from_byte_range(new_byte_range)
     }
 }
 impl From<Location> for Span {
