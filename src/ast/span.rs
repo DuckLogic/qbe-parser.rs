@@ -188,6 +188,20 @@ impl Span {
         }
     }
 
+    /// Return a wrapper type that implements by-value equality
+    /// rather than having all values be equal.
+    #[inline]
+    pub fn eq(self) -> OrderedSpan {
+        OrderedSpan(self)
+    }
+
+    /// Return a wrapper type that implements by-value ordering
+    /// rather than having all values be equal.
+    #[inline]
+    pub fn ord(self) -> OrderedSpan {
+        OrderedSpan(self)
+    }
+
     /// Check if the span is [`Self::MISSING`].
     #[inline]
     pub const fn is_missing(&self) -> bool {
@@ -260,16 +274,88 @@ impl Ord for Span {
         Ordering::Equal
     }
 }
+impl From<OrderedSpan> for Span {
+    #[inline]
+    fn from(value: OrderedSpan) -> Self {
+        value.0
+    }
+}
+/// A wrapper around [`Span`] that properly implements [`Eq`] and [`Ord`]
+/// installed of always being [`Ordering::Equal`].
+///
+/// A [`Span::MISSING`] is considered greater than all other spans.
+#[derive(Debug, Copy, Clone)]
+pub struct OrderedSpan(pub Span);
+impl OrderedSpan {
+    /// The [`OrderedSpan`] corresponding to [`Span::MISSING`].
+    pub const MISSING: Self = OrderedSpan(Span::MISSING);
+}
+impl From<Span> for OrderedSpan {
+    #[inline]
+    fn from(span: Span) -> Self {
+        OrderedSpan(span)
+    }
+}
+impl Hash for OrderedSpan {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self.byte_range() {
+            Ok(o) => (o.start, o.end).hash(state),
+            Err(MissingLocationError) => state.write_u8(0),
+        }
+    }
+}
+impl PartialEq for OrderedSpan {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.byte_range() == other.byte_range()
+    }
+}
+impl PartialEq<Span> for OrderedSpan {
+    fn eq(&self, other: &Span) -> bool {
+        self.byte_range() == other.byte_range()
+    }
+}
+impl Eq for OrderedSpan {}
+impl PartialOrd for OrderedSpan {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialOrd<Span> for OrderedSpan {
+    fn partial_cmp(&self, other: &Span) -> Option<Ordering> {
+        Some(self.cmp(&other.ord()))
+    }
+}
+impl Ord for OrderedSpan {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.0.byte_range(), other.0.byte_range()) {
+            (Ok(this_range), Ok(other_range)) => this_range
+                .start
+                .cmp(&other_range.start)
+                .then_with(|| this_range.end.cmp(&other_range.end)),
+            (Err(_), Ok(_)) => Ordering::Greater,
+            (Ok(_), Err(_)) => Ordering::Less,
+            (Err(_), Err(_)) => Ordering::Equal,
+        }
+    }
+}
+impl Deref for OrderedSpan {
+    type Target = Span;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 mod sealed {
-    use std::fmt::Display;
+    use std::fmt::{Debug, Display};
 
     /// An internal trait for unsigned primitive integers.
     ///
     /// Used for [`Location::from_byte`] and [`Span::from_byte_range`].
     ///
     /// Unlike [`num_traits::PrimInt`], this is is restricted to primitive integers only.
-    pub trait PrimUInt: Display + num_traits::PrimInt + num_traits::Unsigned {}
+    pub trait PrimUInt: Display + Debug + num_traits::PrimInt + num_traits::Unsigned {}
     macro_rules! impl_prim_uints {
         ($($target:ident),+ $(,)?) => {
             $(impl PrimUInt for $target {})*
