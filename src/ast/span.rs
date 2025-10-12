@@ -14,9 +14,8 @@ pub struct MissingLocationError;
 /// Either references a location in the original source file,
 /// or is [`Location::missing`].
 ///
-/// A location only has a partial order,
-/// as [`Location::MISSING`] is not comparable to any present location.
-/// This is similar to how [`f64::NAN`] is not comparable to any present .
+/// A location has a total order based on the byte offset,
+/// with [`Location::MISSING`] coming after every valid location.
 #[derive(Copy, Clone)]
 pub struct Location {
     // Should really be `Option<NonMax>`.
@@ -74,19 +73,27 @@ impl Location {
     }
 }
 impl PartialEq for Location {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
-        match (self.byte_offset(), other.byte_offset()) {
-            (Ok(a), Ok(b)) => a == b,
-            (Err(MissingLocationError), _) | (_, Err(MissingLocationError)) => false,
-        }
+        self.byte_offset == other.byte_offset
     }
 }
+impl Eq for Location {}
 impl PartialOrd for Location {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self.byte_offset(), other.byte_offset()) {
-            (Ok(a), Ok(b)) => Some(a.cmp(&b)),
-            (Err(MissingLocationError), _) | (_, Err(MissingLocationError)) => None,
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Location {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        const {
+            assert!(
+                Location::MISSING.byte_offset == u64::MAX,
+                "Integer ordering must match semantic ordering"
+            );
         }
+        self.byte_offset.cmp(&other.byte_offset)
     }
 }
 impl Display for Location {
