@@ -106,7 +106,7 @@ impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.byte_offset() {
             Ok(offset) => write!(f, "{offset}"),
-            Err(MissingLocationError) => f.write_str("MISSING"),
+            Err(MissingLocationError) => f.write_str("?"),
         }
     }
 }
@@ -320,7 +320,7 @@ impl Display for Span {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self.byte_range() {
             Ok(Range { start, end }) => write!(f, "{start}..{end}"),
-            Err(MissingLocationError) => f.write_str("MISSING"),
+            Err(MissingLocationError) => f.write_str("?"),
         }
     }
 }
