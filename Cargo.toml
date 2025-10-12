@@ -12,6 +12,7 @@ thiserror = "2"
 num-traits = "0.2"
 ordered-float = "5"
 unicode-ident = "1"
+paste3 = "1"
 
 # parsing
 chumsky = "0.11"

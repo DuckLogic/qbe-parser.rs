@@ -159,7 +159,7 @@ pub struct NumericLiteral<T: Number> {
 /// A type that can be used in a [`NumericLiteral`].
 pub trait Number: Debug + Display + num_traits::Num + Clone {}
 macro_rules! impl_numtype {
-    ($($target:ty),*) => {
+    ($($target:ty),+ $(,)?) => {
         $(impl Number for $target {})*
     };
 }
@@ -171,7 +171,9 @@ impl_numtype!(
     i64,
     isize,
     f64,
-    ordered_float::OrderedFloat<f64>
+    ordered_float::OrderedFloat<f64>,
+    u128,
+    i128,
 );
 
 pub(crate) trait PrefixedIdent {
