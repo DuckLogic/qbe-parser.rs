@@ -311,6 +311,12 @@ impl Span {
         Self::from_byte_range(new_byte_range)
     }
 }
+impl From<chumsky::span::SimpleSpan> for Span {
+    #[inline]
+    fn from(span: chumsky::span::SimpleSpan) -> Self {
+        Self::from_byte_range(span.into_range())
+    }
+}
 impl From<Location> for Span {
     fn from(value: Location) -> Self {
         value.to_span()
@@ -440,6 +446,27 @@ impl Deref for OrderedSpan {
     #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+impl chumsky::span::Span for Span {
+    type Context = ();
+    type Offset = Location;
+
+    fn new(_context: Self::Context, range: Range<Self::Offset>) -> Self {
+        Span::new(range.start, range.end)
+    }
+
+    #[inline]
+    fn context(&self) -> Self::Context {}
+
+    #[inline]
+    fn start(&self) -> Self::Offset {
+        self.start
+    }
+
+    #[inline]
+    fn end(&self) -> Self::Offset {
+        self.end
     }
 }
 
