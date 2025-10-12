@@ -1,3 +1,5 @@
+#[macro_use]
+mod macros;
 mod core;
 pub mod span;
 

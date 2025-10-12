@@ -49,10 +49,10 @@ impl<T> From<(T, Span)> for Spanned<T> {
     }
 }
 
-/// Implements a wrapper around a [`String`] like [`Ident`] or [`StringLiteral`].
+/// Implements an opaque wrapper around a [`String`] like [`Ident`] or [`StringLiteral`].
 ///
 /// Does not implement [`Display`].
-macro_rules! impl_string_wrapper {
+macro_rules! opaque_string_wrapper {
     ($target:ident) => {
         impl $target {
             #[inline]
@@ -80,35 +80,7 @@ macro_rules! impl_string_wrapper {
                 $target::new(value.value, value.span)
             }
         }
-        impl Debug for $target {
-            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-                f.debug_tuple(stringify!($target))
-                    .field(&self.text)
-                    .finish()
-            }
-        }
-        impl AsRef<str> for $target {
-            #[inline]
-            fn as_ref(&self) -> &str {
-                &self.text
-            }
-        }
-        impl Borrow<str> for $target {
-            #[inline]
-            fn borrow(&self) -> &str {
-                &self.text
-            }
-        }
-        impl equivalent::Equivalent<String> for $target {
-            fn equivalent(&self, other: &String) -> bool {
-                self.text.equivalent(other)
-            }
-        }
-        impl equivalent::Comparable<String> for $target {
-            fn compare(&self, key: &String) -> Ordering {
-                self.text.cmp(key)
-            }
-        }
+        impl_string_like!($target);
     };
 }
 /// An identifier in the source code.
@@ -145,7 +117,7 @@ impl Ident {
         Ident { text, span }
     }
 }
-impl_string_wrapper!(Ident);
+opaque_string_wrapper!(Ident);
 impl Display for Ident {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(&self.text)
@@ -167,7 +139,7 @@ impl StringLiteral {
         }
     }
 }
-impl_string_wrapper!(StringLiteral);
+opaque_string_wrapper!(StringLiteral);
 impl Display for StringLiteral {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_char('"')?;
@@ -201,3 +173,65 @@ impl_numtype!(
     f64,
     ordered_float::OrderedFloat<f64>
 );
+
+pub(crate) trait PrefixedIdent {
+    const PREFIX: char;
+    fn new(ident: Ident, span: Span) -> Self;
+}
+macro_rules! prefixed_ident_type {
+    ($target:ident, $prefix:literal) => {
+        #[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+        pub struct $target {
+            ident: Ident,
+            span: Span,
+        }
+        impl PrefixedIdent for $target {
+            const PREFIX: char = $prefix;
+            #[track_caller]
+            fn new(ident: Ident, span: Span) -> Self {
+                <Self>::new(ident, span)
+            }
+        }
+        impl $target {
+            pub const PREFIX: char = $prefix;
+            #[inline]
+            pub fn text(&self) -> &'_ str {
+                self.ident.text()
+            }
+            #[inline]
+            pub fn ident(&self) -> &'_ Ident {
+                &self.ident
+            }
+            #[inline]
+            pub fn span(&self) -> Span {
+                self.span
+            }
+            #[inline]
+            #[track_caller]
+            pub fn new(ident: Ident, span: Span) -> Self {
+                let res = Self { ident, span };
+                assert_eq!(res.ident.span().is_missing(), span.is_missing());
+                if !span.is_missing() {
+                    assert_eq!(
+                        res.ident.span().byte_range().unwrap(),
+                        span.slice_byte_indexes(1..).byte_range().unwrap(),
+                        "Span for {ident:?} doesn't correspond to {res:?}",
+                        ident = res.ident
+                    );
+                }
+                res
+            }
+        }
+        impl_ident_like!($target);
+        impl Display for $target {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+                f.write_char(Self::PREFIX)?;
+                f.write_str(self.text())
+            }
+        }
+    };
+}
+prefixed_ident_type!(TypeName, ':');
+prefixed_ident_type!(GlobalName, '$');
+prefixed_ident_type!(TemporaryName, '%');
+prefixed_ident_type!(BlockName, '@');
