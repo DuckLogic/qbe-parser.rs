@@ -4,6 +4,7 @@ use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter, Write};
 use std::hash::Hash;
+use std::ops::Deref;
 use std::sync::OnceLock;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
@@ -13,6 +14,15 @@ pub use crate::ast::Span;
 pub struct Spanned<T> {
     pub value: T,
     pub span: Span,
+}
+impl<T> Spanned<T> {
+    #[inline]
+    pub fn map<U>(this: Self, func: impl FnOnce(T) -> U) -> Spanned<U> {
+        Spanned {
+            value: func(this.value),
+            span: this.span,
+        }
+    }
 }
 impl<T: Debug> Debug for Spanned<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -46,6 +56,14 @@ impl<T> From<(T, Span)> for Spanned<T> {
             value: value.0,
             span: value.1,
         }
+    }
+}
+impl<T> Deref for Spanned<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.value
     }
 }
 
@@ -155,6 +173,25 @@ pub struct NumericLiteral<T: Number> {
     pub value: T,
     pub span: Span,
 }
+impl<T: Number> NumericLiteral<T> {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
+    }
+}
+impl<T: Number> Display for NumericLiteral<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.value, f)
+    }
+}
+impl<T: Number> From<T> for NumericLiteral<T> {
+    fn from(value: T) -> Self {
+        NumericLiteral {
+            value,
+            span: Span::MISSING,
+        }
+    }
+}
 
 /// A type that can be used in a [`NumericLiteral`].
 pub trait Number: Debug + Display + num_traits::Num + Clone {}
@@ -172,6 +209,7 @@ impl_numtype!(
     isize,
     f64,
     ordered_float::OrderedFloat<f64>,
+    ordered_float::NotNan<f64>,
     u128,
     i128,
 );

@@ -1,15 +1,16 @@
 pub mod tokens;
 
 use crate::ast::{
-    BlockName, GlobalName, Ident, Span, Spanned, StringLiteral, TemporaryName, TypeName,
+    BlockName, GlobalName, Ident, NumericLiteral, Span, Spanned, StringLiteral, TemporaryName,
+    TypeName,
 };
 use chumsky::input::MapExtra;
 use chumsky::prelude::*;
-
+use ordered_float::OrderedFloat;
 pub use tokens::{Keyword, Operator, ShortTypeSpec, Token};
-pub(crate) use tokens::{keyword, operator, short_type_spec};
+pub(crate) use tokens::{keyword, operator};
 
-type ParserExtra<'a, T> = extra::Err<Rich<'a, T>>;
+pub type ParserExtra<'a, T> = extra::Err<Rich<'a, T>>;
 macro_rules! parser_trait_alias {
     ($v:vis trait $name:ident<$l:lifetime, $output:ident>: $($bound:tt)*) => {
         $v trait $name<$l, $output>: $($bound)* {}
@@ -36,6 +37,13 @@ fn token<'a>() -> impl StringParser<'a, Token> {
                 .map(|x| Token::$target($target::new(x.value, x.span)))
         });
     }
+    macro_rules! delimiter {
+        ($txt:literal => $variant:ident) => {
+            just($txt)
+                .map_with(spanned)
+                .map(|val| Token::$variant(val.span))
+        };
+    }
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
     // A single token
     choice((
@@ -51,6 +59,48 @@ fn token<'a>() -> impl StringParser<'a, Token> {
         prefixed_idents,
         Operator::text_parser().map_with(spanned).map(Token::from),
         string_literal().map(Token::StringLiteral),
+        delimiter!("{" => OpenBrace),
+        delimiter!("}" => CloseBrace),
+        one_of("+-")
+            .or_not()
+            .ignore_then(text::int(10))
+            .to_slice()
+            .try_map(|text: &str, span| {
+                let value = text
+                    .parse::<i128>()
+                    .map_err(|e| Rich::custom(span, format!("Failed to parse integer, {e}")))?;
+                let first = text.chars().next().unwrap();
+                if !matches!(first, '+' | '-')
+                    && let Ok(value) = u64::try_from(value)
+                {
+                    Ok(Token::Number(NumericLiteral {
+                        value,
+                        span: Span::from(span),
+                    }))
+                } else {
+                    Ok(Token::Integer(NumericLiteral {
+                        value,
+                        span: Span::from(span),
+                    }))
+                }
+            })
+            .labelled("integer"),
+        one_of("+-")
+            .or_not()
+            .then(text::int(10).or_not())
+            .then(just("."))
+            .then(text::int(10))
+            .to_slice()
+            .try_map(|text: &str, span| {
+                let value = text.parse::<f64>().map_err(|e| {
+                    Rich::custom(span, format!("Failed to parse floating-point number, {e}"))
+                })?;
+                Ok(Token::Float(NumericLiteral {
+                    value: OrderedFloat(value),
+                    span: Span::from(span),
+                }))
+            })
+            .labelled("floating-point number"),
     ))
     .labelled("token")
     .boxed()

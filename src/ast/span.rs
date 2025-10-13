@@ -12,7 +12,7 @@ use std::ops::{Bound, Deref, Range, RangeBounds};
 pub struct MissingLocationError;
 
 /// Either references a location in the original source file,
-/// or is [`Location::missing`].
+/// or is [`Location::MISSING`].
 ///
 /// A location has a total order based on the byte offset,
 /// with [`Location::MISSING`] coming after every valid location.
@@ -127,13 +127,13 @@ impl Default for Location {
 
 /// References a range of bytes in the original source file.
 ///
-/// Can be ["missing"](Span::missing),
+/// Can be ["missing"](Span::MISSING),
 /// in which case doesn't correspond to any actual portion of the source file.
 /// This is the [`Default`] value.
 ///
 /// For the purposes of comparisons, all spans are considered equal to each other.
 /// This means that calling [`PartialEq::eq`] just returns `true`,
-/// calling [`Has:h::hash`] does nothing
+/// calling [`Hash::hash`] does nothing
 /// and calling [`Ord::cmp`] always returns [`Ordering::Equal`].
 /// This means that adding a [`Span`] field to a type
 /// can never impact the derived implementations of these traits.

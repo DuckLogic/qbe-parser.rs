@@ -3,7 +3,6 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use chumsky::prelude::*;
-use chumsky::text::whitespace;
 use ordered_float::OrderedFloat;
 
 use crate::ast::{
@@ -34,6 +33,58 @@ pub enum Token {
     Keyword(Keyword, Span),
     ShortTypeSpec(ShortTypeSpec, Span),
     Operator(Operator, Span),
+    // delimiters
+    OpenBrace(Span),
+    CloseBrace(Span),
+}
+macro_rules! token_impls {
+    (
+        complex { $($complex_variant:ident),+ $(,)? },
+        wraps_enum { $($wrap_variant:ident),+ $(,)? },
+        simple { $($simple_variant:ident  => $delim:literal),+ $(,)? } $(,)?
+    ) => {
+        impl Token {
+            pub fn span(&self) -> Span {
+                #[deny(unreachable_patterns)]
+                match self {
+                    $(Self::$complex_variant(inner) => inner.span(),)*
+                    $(Self::$wrap_variant(_, span) => *span,)*
+                    $(Self::$simple_variant(span) => *span,)*
+                }
+            }
+        }
+        impl Display for Token {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(Self::$complex_variant(inner) => Display::fmt(inner, f),)*
+                    $(Self::$wrap_variant(inner, _) => Display::fmt(inner, f),)+
+                    $(Self::$simple_variant(_) => f.write_str($delim),)+
+                }
+            }
+        }
+    }
+}
+token_impls! {
+    complex {
+        Ident,
+        TypeName,
+        GlobalName,
+        TemporaryName,
+        BlockName,
+        StringLiteral,
+        Number,
+        Integer,
+        Float,
+    },
+    wraps_enum {
+        Keyword,
+        Operator,
+        ShortTypeSpec,
+    },
+    simple {
+        OpenBrace => "{",
+        CloseBrace => "}",
+    }
 }
 macro_rules! token_from_simple {
     ($($variant:ident),+ $(,)?) => {
@@ -53,6 +104,10 @@ token_from_simple! {
     BlockName,
     StringLiteral,
 }
+#[allow(unused)]
+const _TOKEN_USED: () = {
+    let _ = Token::span;
+};
 
 macro_rules! define_keyword_enum {
     (enum $target:ident {
@@ -71,7 +126,7 @@ macro_rules! define_string_enum {
     }) => {
         paste3::paste! {
             macro_rules! [<$target:snake>] {
-                $(($($inner)*) => ($target::$kw);)*
+                $(($($inner)*) => ($crate::lexer::$target::$kw);)*
             }
         }
         define_string_enum!(@nomacro enum $target {
@@ -174,9 +229,15 @@ define_string_enum!(
         UnsignedHalf(uh),
     }
 );
+#[allow(unused)]
+const _SHORT_TYPE_SPEC_USED: () = {
+    let _ = ShortTypeSpec::parser;
+    let _ = short_type_spec!(w);
+};
 define_string_enum!(enum Operator {
     SingleEquals(=),
     Colon(:),
+    Comma(,),
 });
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("Keyword is not valid")]
