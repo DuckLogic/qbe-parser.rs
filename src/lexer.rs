@@ -39,12 +39,12 @@ fn token<'a>() -> impl StringParser<'a, Token> {
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
     // A single token
     choice((
-        Operator::parser().map_with(spanned).map(Token::from),
-        Keyword::parser()
+        Operator::text_parser().map_with(spanned).map(Token::from),
+        Keyword::text_parser()
             .map_with(spanned)
             .map(Token::from)
             .labelled("keyword"),
-        ShortTypeSpec::parser()
+        ShortTypeSpec::text_parser()
             .map_with(spanned)
             .map(Token::from)
             .labelled("type specifier"),

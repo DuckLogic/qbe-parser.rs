@@ -77,7 +77,11 @@ macro_rules! define_string_enum {
                     $(Self::$kw => $text),*
                 }
             }
-            pub(crate) fn parser<'a>() -> impl StringParser<'a, $target> {
+            /// Parses this token, returning the [`Span`] of the value.o
+            pub(crate) fn parser<'a>(&self) -> impl TokenParser<'a, Span> {
+                select!(Token::$target(x, span) if x == *self => span)
+            }
+            pub(super) fn text_parser<'a>() -> impl StringParser<'a, $target> {
                 // TODO: Would be nice to cache the result directly,
                 // but that module is currently unstable
                 const COUNT: usize = define_string_enum!(@count $($kw),*);
@@ -140,7 +144,7 @@ define_string_enum!(
         // base types (BASETY)
         Word(w),
         Long(l),
-        Short(s),
+        Single(s),
         Double(d),
         // extended types (EXTTY)
         Byte(b),
@@ -169,7 +173,7 @@ pub struct InvalidShortTypeSpecError;
 pub struct InvalidOperatorError;
 
 // re-export macros (this works?)
-use crate::lexer::StringParser;
+use crate::lexer::{StringParser, TokenParser};
 pub(crate) use keyword;
 pub(crate) use operator;
 pub(crate) use short_type_spec;
