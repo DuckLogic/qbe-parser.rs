@@ -4,7 +4,7 @@ use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter, Write};
 use std::hash::Hash;
-
+use std::sync::OnceLock;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
 pub use crate::ast::Span;
@@ -176,10 +176,6 @@ impl_numtype!(
     i128,
 );
 
-pub(crate) trait PrefixedIdent {
-    const PREFIX: char;
-    fn new(ident: Ident, span: Span) -> Self;
-}
 macro_rules! prefixed_ident_type {
     ($target:ident, $prefix:literal) => {
         #[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -187,15 +183,16 @@ macro_rules! prefixed_ident_type {
             ident: Ident,
             span: Span,
         }
-        impl PrefixedIdent for $target {
-            const PREFIX: char = $prefix;
-            #[track_caller]
-            fn new(ident: Ident, span: Span) -> Self {
-                <Self>::new(ident, span)
-            }
-        }
         impl $target {
             pub const PREFIX: char = $prefix;
+            /// The label used for describing this value.
+            pub(crate) fn label() -> &'static str {
+                static LABEL: OnceLock<Box<str>> = OnceLock::new();
+                &*LABEL.get_or_init(|| {
+                    let snake_name: &str = paste3::paste!(stringify!());
+                    snake_name.replace('_', " ").into_boxed_str()
+                })
+            }
             #[inline]
             pub fn text(&self) -> &'_ str {
                 self.ident.text()

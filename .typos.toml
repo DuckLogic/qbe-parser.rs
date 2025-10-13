@@ -1,3 +1,7 @@
+[default.extend-words]
+# Part of chumsky
+labelled = "labelled"
+
 [files]
 ignore-hidden = false
 extend-exclude = [

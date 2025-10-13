@@ -1,9 +1,15 @@
-use crate::ast::{
-    BlockName, GlobalName, Ident, NumericLiteral, Span, StringLiteral, TemporaryName, TypeName,
-};
-use ordered_float::OrderedFloat;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
+use std::sync::OnceLock;
+
+use chumsky::prelude::*;
+use chumsky::text::whitespace;
+use ordered_float::OrderedFloat;
+
+use crate::ast::{
+    BlockName, GlobalName, Ident, NumericLiteral, Span, Spanned, StringLiteral, TemporaryName,
+    TypeName,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Token {
@@ -27,6 +33,7 @@ pub enum Token {
     //
     Keyword(Keyword, Span),
     ShortTypeSpec(ShortTypeSpec, Span),
+    Operator(Operator, Span),
 }
 
 macro_rules! define_keyword_enum {
@@ -62,11 +69,41 @@ macro_rules! define_string_enum {
             $($kw),*
         }
         impl $target {
+            pub const ALL: [Self; Self::COUNT] = [$(Self::$kw),*];
+            pub const COUNT: usize = define_string_enum!(@count $($kw),*);
             #[inline]
             pub fn text(self) -> &'static str {
                 match self {
                     $(Self::$kw => $text),*
                 }
+            }
+            pub(crate) fn parser<'a>() -> impl StringParser<'a, $target> {
+                // TODO: Would be nice to cache the result directly,
+                // but that module is currently unstable
+                const COUNT: usize = define_string_enum!(@count $($kw),*);
+                static SORTED_TOKENS: OnceLock<[$target; COUNT]> = OnceLock::new();
+                let sorted_tokens: [$target; COUNT] = *SORTED_TOKENS.get_or_init(|| {
+                    let mut tokens: [$target; Self::COUNT] = Self::ALL.clone();
+                    tokens.sort_by_key(|tk| {
+                        let text = tk.text();
+                        // long tokens must always come before short tokens,
+                        // then sort alphabetically
+                        (text.len(), text)
+                    });
+                    tokens
+                });
+                let parsers = sorted_tokens.map(|token| just(token.text()).to(token));
+                choice(parsers)
+            }
+        }
+        impl From<Spanned<$target>> for Token {
+            fn from(value: Spanned<$target>) -> Self {
+                Token::$target(value.value, value.span)
+            }
+        }
+        impl From<$target> for Token {
+            fn from(value: $target) -> Self {
+                Token::$target(value, Span::MISSING)
             }
         }
         impl FromStr for $target {
@@ -87,7 +124,9 @@ macro_rules! define_string_enum {
     (@text $kw:ident) => (paste3::paste!(stringify!([<$kw:lower>])));
     (@text $kw:ident => $text:expr) => ($text);
     (@text $kw:ident( $($inner:tt)* )) => (stringify!($($inner)*));
-
+    (@count) => (0);
+    (@count $kw:ident) => (1);
+    (@count $first:ident , $($kw:ident),*) => (1 + define_string_enum!(@count $($kw),*));
 }
 define_keyword_enum!(
     enum Keyword {
@@ -115,6 +154,7 @@ define_string_enum!(
 );
 define_string_enum!(enum Operator {
     SingleEquals(=),
+    Colon(:),
 });
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("Keyword is not valid")]
@@ -129,6 +169,7 @@ pub struct InvalidShortTypeSpecError;
 pub struct InvalidOperatorError;
 
 // re-export macros (this works?)
+use crate::lexer::StringParser;
 pub(crate) use keyword;
 pub(crate) use operator;
 pub(crate) use short_type_spec;
