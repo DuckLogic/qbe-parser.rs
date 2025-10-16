@@ -35,6 +35,24 @@ pub enum Token {
     ShortTypeSpec(ShortTypeSpec, Span),
     Operator(Operator, Span),
 }
+macro_rules! token_from_simple {
+    ($($variant:ident),+ $(,)?) => {
+        $(impl From<$variant> for Token {
+            #[inline]
+            fn from(value: $variant) -> Self {
+                Token::$variant(value)
+            }
+        })*
+    };
+}
+token_from_simple! {
+    Ident,
+    TypeName,
+    GlobalName,
+    TemporaryName,
+    BlockName,
+    StringLiteral,
+}
 
 macro_rules! define_keyword_enum {
     (enum $target:ident {

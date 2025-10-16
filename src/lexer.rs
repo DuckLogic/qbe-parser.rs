@@ -39,7 +39,6 @@ fn token<'a>() -> impl StringParser<'a, Token> {
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
     // A single token
     choice((
-        Operator::text_parser().map_with(spanned).map(Token::from),
         Keyword::text_parser()
             .map_with(spanned)
             .map(Token::from)
@@ -50,6 +49,7 @@ fn token<'a>() -> impl StringParser<'a, Token> {
             .labelled("type specifier"),
         ident().map(Token::Ident),
         prefixed_idents,
+        Operator::text_parser().map_with(spanned).map(Token::from),
         string_literal().map(Token::StringLiteral),
     ))
     .labelled("token")
@@ -167,6 +167,19 @@ mod test {
                 .into_iter()
                 .map(Token::from)
                 .collect::<Vec<_>>(),
+        )
+    }
+
+    #[test]
+    fn prefixed_idents() {
+        assert_eq!(
+            tokenize(":foo $bar %baz @foo").unwrap(),
+            vec![
+                TypeName::without_span("foo").into(),
+                GlobalName::without_span("bar").into(),
+                TemporaryName::without_span("baz").into(),
+                BlockName::without_span("foo").into(),
+            ]
         )
     }
 }
