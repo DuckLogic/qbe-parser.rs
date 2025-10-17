@@ -209,6 +209,9 @@ define_keyword_enum!(
     enum Keyword {
         Align,
         Data,
+        Export,
+        Section,
+        Thread,
         Type,
     }
 );

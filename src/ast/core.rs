@@ -87,6 +87,11 @@ macro_rules! opaque_string_wrapper {
                 $target::new(value, Span::MISSING)
             }
         }
+        impl From<&str> for $target {
+            fn from(value: &str) -> Self {
+                $target::new(value, Span::MISSING)
+            }
+        }
         impl From<(String, Span)> for $target {
             #[inline]
             fn from(value: (String, Span)) -> Self {
@@ -149,6 +154,9 @@ pub struct StringLiteral {
     span: Span,
 }
 impl StringLiteral {
+    pub fn unspanned(text: impl Into<String>) -> Self {
+        StringLiteral::new(text, Span::MISSING)
+    }
     #[inline]
     pub fn new(text: impl Into<String>, span: Span) -> Self {
         StringLiteral {

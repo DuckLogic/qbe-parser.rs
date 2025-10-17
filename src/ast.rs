@@ -1,6 +1,7 @@
 #[macro_use]
 mod macros;
 mod core;
+pub mod linkage;
 pub mod span;
 pub mod types;
 
