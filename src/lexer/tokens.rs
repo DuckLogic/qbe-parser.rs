@@ -3,11 +3,10 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use chumsky::prelude::*;
-use ordered_float::OrderedFloat;
 
 use crate::ast::{
-    BlockName, GlobalName, Ident, NumericLiteral, Span, Spanned, StringLiteral, TemporaryName,
-    TypeName,
+    BlockName, FloatLiteral, GlobalName, Ident, NumericLiteral, Span, Spanned, StringLiteral,
+    TemporaryName, TypeName,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -26,7 +25,7 @@ pub enum Token {
     StringLiteral(StringLiteral),
     Number(NumericLiteral<u64>),
     Integer(NumericLiteral<i128>),
-    Float(NumericLiteral<OrderedFloat<f64>>),
+    Float(FloatLiteral),
     //
     // other
     //
@@ -103,6 +102,11 @@ token_from_simple! {
     TemporaryName,
     BlockName,
     StringLiteral,
+}
+impl From<FloatLiteral> for Token {
+    fn from(value: FloatLiteral) -> Self {
+        Token::Float(value)
+    }
 }
 #[allow(unused)]
 const _TOKEN_USED: () = {

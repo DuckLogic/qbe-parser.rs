@@ -1,8 +1,8 @@
 pub mod tokens;
 
 use crate::ast::{
-    BlockName, GlobalName, Ident, NumericLiteral, Span, Spanned, StringLiteral, TemporaryName,
-    TypeName,
+    BlockName, FloatLiteral, FloatPrefix, GlobalName, Ident, NumericLiteral, Span, Spanned,
+    StringLiteral, TemporaryName, TypeName,
 };
 use chumsky::input::MapExtra;
 use chumsky::prelude::*;
@@ -51,6 +51,8 @@ fn token<'a>() -> impl StringParser<'a, Token> {
             .map_with(spanned)
             .map(Token::from)
             .labelled("keyword"),
+        // must come before ident and type spec or `d_` might be recognized incorrectly
+        float_literal().map(Token::Float),
         ShortTypeSpec::text_parser()
             .map_with(spanned)
             .map(Token::from)
@@ -85,25 +87,42 @@ fn token<'a>() -> impl StringParser<'a, Token> {
                 }
             })
             .labelled("integer"),
-        one_of("+-")
-            .or_not()
-            .then(text::int(10).or_not())
-            .then(just("."))
-            .then(text::int(10))
-            .to_slice()
-            .try_map(|text: &str, span| {
-                let value = text.parse::<f64>().map_err(|e| {
-                    Rich::custom(span, format!("Failed to parse floating-point number, {e}"))
-                })?;
-                Ok(Token::Float(NumericLiteral {
-                    value: OrderedFloat(value),
-                    span: Span::from(span),
-                }))
-            })
-            .labelled("floating-point number"),
     ))
     .labelled("token")
     .boxed()
+}
+fn float_literal<'a>() -> impl StringParser<'a, FloatLiteral> {
+    let prefix = choice((
+        just("d_").to(FloatPrefix::DoublePrecision),
+        just("s_").to(FloatPrefix::SinglePrecision),
+    ))
+    .map_with(spanned);
+    prefix
+        .then(floating_point_value())
+        .map_with(|(prefix, value), extra| FloatLiteral {
+            span: extra.span().into(),
+            value,
+            prefix,
+        })
+        .labelled("floating point literal")
+}
+fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFloat<f64>>> {
+    one_of("+-")
+        .or_not()
+        .then(text::int(10).or_not())
+        .then(just("."))
+        .then(text::int(10))
+        .to_slice()
+        .try_map(|text: &str, span| {
+            let value = text.parse::<f64>().map_err(|e| {
+                Rich::custom(span, format!("Failed to parse floating-point number, {e}"))
+            })?;
+            Ok(NumericLiteral {
+                value: OrderedFloat(value),
+                span: Span::from(span),
+            })
+        })
+        .labelled("floating-point number")
 }
 pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Token>> {
     // Unlike text::newline, this only accepts ASCII newline operators
@@ -208,15 +227,40 @@ fn string_literal<'a>() -> impl StringParser<'a, StringLiteral> {
 mod test {
     use super::*;
 
+    fn tokens(val: impl IntoIterator<Item: Into<Token>>) -> Vec<Token> {
+        val.into_iter().map(Into::into).collect()
+    }
+
     #[test]
     fn operators() {
         assert_eq!(token().parse("=").unwrap(), operator!(=).into());
         assert_eq!(
             tokenize("= :").unwrap(),
-            vec![operator!(=), operator!(:)]
-                .into_iter()
-                .map(Token::from)
-                .collect::<Vec<_>>(),
+            tokens([operator!(=), operator!(:)])
+        )
+    }
+
+    #[test]
+    fn float_literals_basic() {
+        fn float(val: f64, prefix: FloatPrefix) -> FloatLiteral {
+            FloatLiteral {
+                span: Span::MISSING,
+                prefix: Spanned::from(prefix),
+                value: NumericLiteral {
+                    value: OrderedFloat(val),
+                    span: Span::MISSING,
+                },
+            }
+        }
+        fn double(f: f64) -> FloatLiteral {
+            float(f, FloatPrefix::DoublePrecision)
+        }
+        fn single(f: f64) -> FloatLiteral {
+            float(f, FloatPrefix::SinglePrecision)
+        }
+        assert_eq!(
+            tokenize("d_5.8 s_1.0").unwrap(),
+            tokens([double(5.8), single(1.0)])
         )
     }
 

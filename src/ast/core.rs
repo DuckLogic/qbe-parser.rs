@@ -1,7 +1,7 @@
 //! The core AST types.
 
+use ordered_float::OrderedFloat;
 use std::borrow::Borrow;
-use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter, Write};
 use std::hash::Hash;
 use std::ops::Deref;
@@ -10,7 +10,8 @@ use unicode_ident::{is_xid_continue, is_xid_start};
 
 pub use crate::ast::Span;
 
-#[derive(Copy, Clone)]
+// NOTE: Derive macros for Ord, Eq, Hash ignore Span, only consider value
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Spanned<T> {
     pub value: T,
     pub span: Span,
@@ -29,19 +30,11 @@ impl<T: Debug> Debug for Spanned<T> {
         f.debug_tuple("Spanned").field(&self.value).finish()
     }
 }
-impl<T: PartialOrd> PartialOrd for Spanned<T> {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.value.partial_cmp(&other.value)
+impl<T: Display> Display for Spanned<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.value, f)
     }
 }
-impl<T: PartialEq> PartialEq for Spanned<T> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.value == other.value
-    }
-}
-impl<T: Eq> Eq for Spanned<T> {}
 impl<T> From<T> for Spanned<T> {
     fn from(value: T) -> Self {
         Spanned {
@@ -198,6 +191,44 @@ impl<T: Number> From<T> for NumericLiteral<T> {
             value,
             span: Span::MISSING,
         }
+    }
+}
+
+/// A prefix for a [`FloatLiteral`],
+/// which determines the size of the float.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum FloatPrefix {
+    SinglePrecision,
+    DoublePrecision,
+}
+impl FloatPrefix {
+    pub fn text(&self) -> &'static str {
+        match self {
+            FloatPrefix::SinglePrecision => "s_",
+            FloatPrefix::DoublePrecision => "d_",
+        }
+    }
+}
+impl Display for FloatPrefix {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.text())
+    }
+}
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
+pub struct FloatLiteral {
+    pub span: Span,
+    pub prefix: Spanned<FloatPrefix>,
+    pub value: NumericLiteral<OrderedFloat<f64>>,
+}
+impl Display for FloatLiteral {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.prefix, self.value)
+    }
+}
+impl FloatLiteral {
+    #[inline]
+    pub fn span(&self) -> Span {
+        self.span
     }
 }
 
