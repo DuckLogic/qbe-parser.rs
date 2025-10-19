@@ -72,5 +72,33 @@ macro_rules! impl_fromstr_via_parse {
         })*
     };
 }
+#[cfg(test)]
+macro_rules! test_parse_print {
+    ($parse_name:ident, $print_name:ident for $target:ty { $($text:literal => $item:expr),+ $(,)? }) => {
+        #[test]
+        fn $parse_name() {
+            $({
+                let text: &str = indoc::indoc!($text);
+                assert_eq!(
+                    crate::parse::parse_str::<$target>(text)
+                        .unwrap_or_else(|e| panic!("{e} (text = `{text}`)")),
+                    $item,
+                )
+            })*
+        }
+        #[test]
+        fn $print_name() {
+            $({
+                let item: $target = $item;
+                assert_eq!(
+                    indoc::indoc!($text),
+                    ToString::to_string(&item),
+                );
+            })*
+        }
+    };
+}
 
 pub(crate) use impl_fromstr_via_parse;
+#[cfg(test)]
+pub(crate) use test_parse_print;

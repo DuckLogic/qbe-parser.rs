@@ -9,6 +9,8 @@ use std::sync::OnceLock;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
 pub use crate::ast::Span;
+use crate::lexer::{Token, TokenParser};
+use crate::parse::{Parse, impl_fromstr_via_parse};
 
 // NOTE: Derive macros for Ord, Eq, Hash ignore Span, only consider value
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
@@ -169,15 +171,29 @@ impl Display for StringLiteral {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
 pub struct NumericLiteral<T: Number> {
     pub value: T,
     pub span: Span,
 }
 impl<T: Number> NumericLiteral<T> {
     #[inline]
+    pub fn unspanned(value: T) -> Self {
+        NumericLiteral {
+            value,
+            span: Span::MISSING,
+        }
+    }
+    #[inline]
     pub fn span(&self) -> Span {
         self.span
+    }
+    #[inline]
+    pub fn map_value<U: Number>(self, func: impl FnOnce(T) -> U) -> NumericLiteral<U> {
+        NumericLiteral {
+            value: func(self.value),
+            span: self.span,
+        }
     }
 }
 impl<T: Number> Display for NumericLiteral<T> {
@@ -186,11 +202,21 @@ impl<T: Number> Display for NumericLiteral<T> {
     }
 }
 impl<T: Number> From<T> for NumericLiteral<T> {
+    #[inline]
     fn from(value: T) -> Self {
-        NumericLiteral {
-            value,
-            span: Span::MISSING,
-        }
+        Self::unspanned(value)
+    }
+}
+impl From<f64> for NumericLiteral<OrderedFloat<f64>> {
+    #[inline]
+    fn from(value: f64) -> Self {
+        Self::unspanned(value.into())
+    }
+}
+impl From<f32> for NumericLiteral<OrderedFloat<f32>> {
+    #[inline]
+    fn from(value: f32) -> Self {
+        Self::unspanned(value.into())
     }
 }
 
@@ -214,23 +240,47 @@ impl Display for FloatPrefix {
         f.write_str(self.text())
     }
 }
+type FloatValue = NumericLiteral<OrderedFloat<f64>>;
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
 pub struct FloatLiteral {
     pub span: Span,
     pub prefix: Spanned<FloatPrefix>,
-    pub value: NumericLiteral<OrderedFloat<f64>>,
-}
-impl Display for FloatLiteral {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.prefix, self.value)
-    }
+    pub value: FloatValue,
 }
 impl FloatLiteral {
     #[inline]
     pub fn span(&self) -> Span {
         self.span
     }
+    /// Create a single-precision float literal without any span information.
+    pub fn single_unspanned(value: impl Into<FloatValue>) -> Self {
+        FloatLiteral {
+            value: value.into(),
+            span: Span::MISSING,
+            prefix: Spanned::from(FloatPrefix::SinglePrecision),
+        }
+    }
+    /// Create a double-precision float literal without any span information.
+    pub fn double_unspanned(value: impl Into<FloatValue>) -> Self {
+        FloatLiteral {
+            value: value.into(),
+            span: Span::MISSING,
+            prefix: Spanned::from(FloatPrefix::DoublePrecision),
+        }
+    }
 }
+impl Display for FloatLiteral {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}{}", self.prefix, self.value)
+    }
+}
+impl Parse for FloatLiteral {
+    const DESC: &'static str = "float literal";
+    fn parser<'a>() -> impl TokenParser<'a, Self> {
+        chumsky::select!(Token::Float(literal) => literal)
+    }
+}
+impl_fromstr_via_parse!(FloatLiteral);
 
 /// A type that can be used in a [`NumericLiteral`].
 pub trait Number: Debug + Display + num_traits::Num + Clone {}
@@ -247,6 +297,7 @@ impl_numtype!(
     i64,
     isize,
     f64,
+    ordered_float::OrderedFloat<f32>,
     ordered_float::OrderedFloat<f64>,
     ordered_float::NotNan<f64>,
     u128,
@@ -270,6 +321,10 @@ macro_rules! prefixed_ident_type {
                     snake_name.replace('_', " ").into_boxed_str()
                 })
             }
+            pub fn unspanned(text: &str) -> Self {
+                Self::without_span(text)
+            }
+            // TODO: Deprecate in favor of unspanned
             pub fn without_span(text: &str) -> Self {
                 Self {
                     ident: Ident::new(text, Span::MISSING),

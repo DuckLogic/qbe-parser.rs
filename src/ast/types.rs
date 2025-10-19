@@ -16,6 +16,14 @@ pub struct AlignSpec {
     pub span: Span,
     pub value: NumericLiteral<u64>,
 }
+impl AlignSpec {
+    pub fn unspanned(value: u64) -> Self {
+        AlignSpec {
+            span: Span::MISSING,
+            value: NumericLiteral::unspanned(value),
+        }
+    }
+}
 impl Display for AlignSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "align {}", self.value)

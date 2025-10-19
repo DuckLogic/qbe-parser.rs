@@ -57,9 +57,10 @@ fn token<'a>() -> impl StringParser<'a, Token> {
             .map_with(spanned)
             .map(Token::from)
             .labelled("type specifier"),
-        ident().map(Token::Ident),
         prefixed_idents,
         Operator::text_parser().map_with(spanned).map(Token::from),
+        // must come after Operator since `z` is an operator
+        ident().map(Token::Ident),
         string_literal().map(Token::StringLiteral),
         delimiter!("{" => OpenBrace),
         delimiter!("}" => CloseBrace),
@@ -235,8 +236,8 @@ mod test {
     fn operators() {
         assert_eq!(token().parse("=").unwrap(), operator!(=).into());
         assert_eq!(
-            tokenize("= :").unwrap(),
-            tokens([operator!(=), operator!(:)])
+            tokenize("= : + z").unwrap(),
+            tokens([operator!(=), operator!(:), operator!(+), operator!(z)])
         )
     }
 

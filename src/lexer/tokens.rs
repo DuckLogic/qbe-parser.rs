@@ -245,6 +245,8 @@ define_string_enum!(enum Operator {
     SingleEquals(=),
     Colon(:),
     Comma(,),
+    Plus(+),
+    ZeroInitMarker(z),
 });
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("Keyword is not valid")]
@@ -262,11 +264,11 @@ pub struct InvalidOperatorError;
 use crate::lexer::{StringParser, TokenParser};
 pub(crate) use keyword;
 pub(crate) use operator;
+#[expect(unused_imports, reason = "not currently used")]
 pub(crate) use short_type_spec;
 
 #[cfg(test)]
 mod test {
-    use super::*;
     #[test]
     fn token_macros() {
         assert_eq!(operator!(=).text(), "=");

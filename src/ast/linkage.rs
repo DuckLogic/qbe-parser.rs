@@ -53,6 +53,7 @@ impl Parse for Linkage {
             .try_map(|specifiers, span| {
                 Linkage::from_specifiers(span.into(), specifiers).map_err(|e| Rich::custom(span, e))
             })
+            .labelled(Self::DESC)
     }
 }
 impl_fromstr_via_parse!(Linkage);
@@ -349,7 +350,7 @@ macro_rules! declare_specifiers {
             fn parser<'a>() -> impl TokenParser<'a, Self> {
                 choice((
                     $(<$inner as Parse>::parser().map(LinkageSpecifier::$variant)),*
-                ))
+                )).labelled(Self::DESC)
             }
         }
         $(impl From<$inner> for LinkageSpecifier {

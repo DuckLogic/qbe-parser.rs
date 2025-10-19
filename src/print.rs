@@ -148,3 +148,15 @@ impl Debug for IndentedPrinter<'_> {
             .finish_non_exhaustive()
     }
 }
+macro_rules! impl_display_via_print {
+    ($target:ty) => {
+        impl Display for $target {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                let mut printer = crate::print::IndentedPrinter::new(f);
+                self.print(&mut printer)
+            }
+        }
+    };
+}
+
+pub(crate) use impl_display_via_print;

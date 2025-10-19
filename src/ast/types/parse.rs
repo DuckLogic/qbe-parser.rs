@@ -5,8 +5,9 @@ use crate::parse::{Parse, impl_fromstr_via_parse, spanned};
 
 use chumsky::prelude::*;
 
-impl AlignSpec {
-    pub(crate) fn parser<'a>() -> impl TokenParser<'a, AlignSpec> {
+impl Parse for AlignSpec {
+    const DESC: &'static str = "alignment spec";
+    fn parser<'a>() -> impl TokenParser<'a, AlignSpec> {
         keyword!(align)
             .parser()
             .ignore_then(select!(Token::Number(number) => number))
@@ -14,6 +15,7 @@ impl AlignSpec {
                 value,
                 span: extra.span().into(),
             })
+            .labelled(Self::DESC)
     }
 }
 
