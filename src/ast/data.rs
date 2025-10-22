@@ -236,6 +236,31 @@ impl Display for Constant {
         }
     }
 }
+impl From<FloatLiteral> for Constant {
+    fn from(value: FloatLiteral) -> Self {
+        Constant::Float(value)
+    }
+}
+macro_rules! impl_from_primint {
+    ($($target:ty),+ $(,)?) => {
+        $(impl From<$target> for Constant {
+            fn from(value: $target) -> Self {
+                (value as i128).into()
+            }
+        })*
+    };
+}
+impl_from_primint!(i32, i64, isize, u32, u64, usize);
+impl From<i128> for Constant {
+    fn from(value: i128) -> Self {
+        NumericLiteral::unspanned(value).into()
+    }
+}
+impl From<NumericLiteral<i128>> for Constant {
+    fn from(value: NumericLiteral<i128>) -> Self {
+        Constant::Integer(value)
+    }
+}
 
 #[cfg(test)]
 mod test {

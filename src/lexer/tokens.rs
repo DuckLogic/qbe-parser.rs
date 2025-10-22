@@ -299,9 +299,15 @@ macro_rules! define_string_enum {
 define_keyword_enum!(
     enum Keyword {
         Align,
+        Call,
         Data,
         Export,
         Function,
+        Hlt,
+        Jmp,
+        Jnz,
+        Phi,
+        Ret,
         Section,
         Thread,
         Type,

@@ -3,6 +3,7 @@ use crate::ast::{Location, Span, Spanned};
 use crate::lexer::Token;
 use chumsky::input::{BorrowInput, ExactSizeInput, SliceInput, ValueInput};
 use chumsky::prelude::*;
+use std::fmt::Debug;
 use std::ops::{Range, RangeFrom};
 
 /// An index into the [`TokenStream`].
@@ -12,7 +13,7 @@ pub struct TokenIndex(usize);
 /// An owned vector of [tokens](`Token`), produced by [`crate::lexer::tokenize`].
 ///
 /// Prefer using a [`TokenStream`], which implements [`Input`] and is much faster to `Clone`].
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct TokenVec {
     /// The main list of tokens
     ///
@@ -36,6 +37,13 @@ impl TokenVec {
             assert!(last_location <= eof);
         }
         TokenVec { tokens, eof }
+    }
+}
+impl Debug for TokenVec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list()
+            .entries(self.tokens.iter().map(|s| &s.value))
+            .finish()
     }
 }
 impl PartialEq<Vec<Token>> for TokenVec {

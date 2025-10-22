@@ -89,14 +89,19 @@ fn token<'a>() -> impl StringParser<'a, Token> {
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
     // A basic (not magic) token
     let basic_token = choice((
-        Keyword::text_parser().map(Token::from).labelled("keyword"),
+        Keyword::text_parser()
+            .then_ignore(require_space_like())
+            .map(Token::from)
+            .labelled("keyword"),
         // must come before ident and type spec or `d_` might be recognized incorrectly
         float_literal().map(Token::Float),
         ShortTypeSpec::text_parser()
+            .then_ignore(require_space_like())
             .map(Token::from)
             .labelled("type specifier"),
         prefixed_idents,
         Operator::text_parser()
+            .then_ignore(require_space_like())
             .filter(|op| !op.is_symbol())
             .map(Token::from),
         // must come after Operator since `z` is an operator
@@ -315,7 +320,9 @@ fn string_literal<'a>() -> impl StringParser<'a, StringLiteral> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::lexer::tokens::short_type_spec;
     use chumsky::error::{RichPattern, RichReason};
+    use similar_asserts::assert_eq;
 
     fn tokens(val: impl IntoIterator<Item: Into<Token>>) -> Vec<Token> {
         val.into_iter().map(Into::into).collect()
@@ -532,6 +539,33 @@ mod test {
                 GlobalName::unspanned("bar").into(),
                 TemporaryName::unspanned("baz").into(),
                 BlockName::unspanned("foo").into(),
+            ]
+        )
+    }
+
+    #[test]
+    fn unprefixed_idents() {
+        assert_eq!(
+            tokenize("foo bar").unwrap(),
+            vec![
+                Ident::unspanned("foo").into(),
+                Ident::unspanned("bar").into(),
+            ]
+        );
+    }
+
+    #[test]
+    fn instructions() {
+        assert_eq!(
+            tokenize("%x1 =w sub %x, 1").unwrap(),
+            vec![
+                TemporaryName::unspanned("x1").into(),
+                operator!(=).into(),
+                short_type_spec!(w).into(),
+                Ident::unspanned("sub").into(),
+                TemporaryName::unspanned("x").into(),
+                operator!(,).into(),
+                Token::Number(1.into()),
             ]
         )
     }

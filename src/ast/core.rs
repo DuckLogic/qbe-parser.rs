@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
 pub use crate::ast::Span;
-use crate::lexer::{Token, TokenParser};
+use crate::lexer::{Keyword, ShortTypeSpec, Token, TokenParser};
 use crate::parse::{Parse, impl_fromstr_via_parse};
 
 // NOTE: Derive macros for Ord, Eq, Hash ignore Span, only consider value
@@ -22,6 +22,13 @@ pub struct Spanned<T> {
     pub span: Span,
 }
 impl<T> Spanned<T> {
+    #[inline]
+    pub fn unspanned(value: T) -> Self {
+        Spanned {
+            value,
+            span: Span::MISSING,
+        }
+    }
     #[inline]
     pub fn map<U>(this: Self, func: impl FnOnce(T) -> U) -> Spanned<U> {
         Spanned {
@@ -128,17 +135,16 @@ impl Ident {
     #[track_caller]
     pub fn new(text: impl Into<AstString>, span: Span) -> Self {
         let text = text.into();
-        let invalid_char = |c: char| panic!("Invalid char {c:?} at {span:?}");
         let mut chars = text.chars();
         let first = chars
             .next()
             .unwrap_or_else(|| panic!("Identifier is empty at {span:?}"));
         if !is_xid_start(first) {
-            invalid_char(first)
+            panic!("Invalid start char {first:?} for ident at {span:?}")
         }
         for other in chars {
             if !is_xid_continue(other) {
-                invalid_char(other)
+                panic!("Invalid char {other:?} for ident at {span:?}")
             }
         }
         if let Ok(byte_len) = span.byte_len() {
@@ -150,6 +156,18 @@ impl Ident {
         }
         Ident { text, span }
     }
+    #[inline]
+    pub fn is_keyword(&self) -> bool {
+        self.to_keyword().is_some()
+    }
+    #[inline]
+    pub fn to_keyword(&self) -> Option<Keyword> {
+        self.as_str().parse::<Keyword>().ok()
+    }
+    #[inline]
+    pub fn to_short_type_spec(&self) -> Option<ShortTypeSpec> {
+        self.as_str().parse::<ShortTypeSpec>().ok()
+    }
     /// Get a string representation of this [`Ident`],
     /// equivalent to the [`Display`] impl.
     ///
@@ -158,6 +176,16 @@ impl Ident {
     #[inline]
     pub fn as_str(&self) -> &'_ str {
         &self.text
+    }
+}
+impl From<Spanned<Keyword>> for Ident {
+    fn from(value: Spanned<Keyword>) -> Self {
+        Ident::new(value.text(), value.span)
+    }
+}
+impl From<Keyword> for Ident {
+    fn from(value: Keyword) -> Self {
+        Spanned::unspanned(value).into()
     }
 }
 opaque_string_wrapper!(Ident);

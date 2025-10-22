@@ -2,6 +2,7 @@
 mod macros;
 mod core;
 pub mod data;
+pub mod functions;
 pub mod linkage;
 pub mod span;
 pub mod types;

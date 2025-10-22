@@ -1,9 +1,10 @@
 use crate::ast::{AstString, Span, StringLiteral};
 use crate::lexer::{TokenParser, keyword};
 use crate::parse::{Parse, impl_fromstr_via_parse, maybe_newline};
+use crate::utils::IterExt;
 use arrayvec::ArrayVec;
 use chumsky::prelude::*;
-use std::fmt::{self, Display, Formatter, Write};
+use std::fmt::{self, Display, Formatter};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct LinkageSection {
@@ -71,6 +72,9 @@ impl Linkage {
     pub fn span(&self) -> Span {
         self.span
     }
+    pub fn is_empty(&self) -> bool {
+        self.specifiers.is_empty()
+    }
     pub fn is_export(&self) -> bool {
         self.has_specifier(LinkageSpecifierKind::Export)
     }
@@ -134,13 +138,7 @@ impl Linkage {
 }
 impl Display for Linkage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for (index, part) in self.specifiers.iter().enumerate() {
-            if index > 0 {
-                f.write_char(' ')?;
-            }
-            write!(f, "{part}")?;
-        }
-        Ok(())
+        write!(f, "{}", self.specifiers.iter().format(" "))
     }
 }
 impl From<Linkage> for LinkageBuilder {
