@@ -31,7 +31,7 @@ impl Parse for LinkageSection {
             .map_with(|(name, flags), extra| LinkageSection {
                 name,
                 flags,
-                span: extra.span().into(),
+                span: extra.span(),
             })
     }
 }
@@ -51,7 +51,7 @@ impl Parse for Linkage {
             .repeated()
             .collect::<Vec<LinkageSpecifier>>()
             .try_map(|specifiers, span| {
-                Linkage::from_specifiers(span.into(), specifiers).map_err(|e| Rich::custom(span, e))
+                Linkage::from_specifiers(span, specifiers).map_err(|e| Rich::custom(span, e))
             })
             .labelled(Self::DESC)
     }

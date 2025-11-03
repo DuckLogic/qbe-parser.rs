@@ -450,10 +450,10 @@ impl Deref for OrderedSpan {
 }
 impl chumsky::span::Span for Span {
     type Context = ();
-    type Offset = Location;
+    type Offset = ByteLocation;
 
     fn new(_context: Self::Context, range: Range<Self::Offset>) -> Self {
-        Span::new(range.start, range.end)
+        Span::new(*range.start, *range.end)
     }
 
     #[inline]
@@ -461,12 +461,51 @@ impl chumsky::span::Span for Span {
 
     #[inline]
     fn start(&self) -> Self::Offset {
-        self.start
+        ByteLocation(self.start)
     }
 
     #[inline]
     fn end(&self) -> Self::Offset {
-        self.end
+        ByteLocation(self.end)
+    }
+}
+/// A wrapper around a [`Location`] that implements `From<usize>`.
+///
+/// The [`Location`] type itself doesn't implement `From<usize>`,
+/// because it wants to be absolutely clear that byte offsets are being used
+/// instead of than codepoint offsets.
+///
+/// Needed to implement [`chumsky::span::Span`] in a manner compatible with [`chumsky::input::MappedSpan`].
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct ByteLocation(pub Location);
+impl Deref for ByteLocation {
+    type Target = Location;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl From<Location> for ByteLocation {
+    #[inline]
+    fn from(location: Location) -> Self {
+        ByteLocation(location)
+    }
+}
+impl From<usize> for ByteLocation {
+    #[inline]
+    fn from(value: usize) -> Self {
+        ByteLocation(Location::from_byte(value))
+    }
+}
+impl From<ByteLocation> for Location {
+    #[inline]
+    fn from(location: ByteLocation) -> Self {
+        location.0
+    }
+}
+impl From<ByteLocation> for Span {
+    fn from(location: ByteLocation) -> Self {
+        location.0.to_span()
     }
 }
 

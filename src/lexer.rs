@@ -4,13 +4,14 @@ use crate::ast::{
     BlockName, FloatLiteral, FloatPrefix, GlobalName, Ident, NumericLiteral, Span, Spanned,
     StringLiteral, TemporaryName, TypeName,
 };
-use chumsky::input::MapExtra;
+use chumsky::input::{MapExtra, MappedSpan};
 use chumsky::prelude::*;
 use ordered_float::OrderedFloat;
-pub use tokens::{Keyword, Operator, ShortTypeSpec, Token};
+pub(crate) use tokens::{Keyword, Operator, ShortTypeSpec, Token};
 pub(crate) use tokens::{keyword, operator};
 
-pub type ParserExtra<'a, T> = extra::Err<Rich<'a, T>>;
+pub(crate) type RichParseError<'a, T = Token> = Rich<'a, T, Span>;
+pub(crate) type ParserExtra<'a, T = Token> = extra::Err<RichParseError<'a, T>>;
 macro_rules! parser_trait_alias {
     ($v:vis trait $name:ident<$l:lifetime, $output:ident>: $($bound:tt)*) => {
         $v trait $name<$l, $output>: $($bound)* {}
@@ -18,9 +19,14 @@ macro_rules! parser_trait_alias {
             where T: $($bound)* {}
     };
 }
-pub type TokenStream<'a> = &'a [Token];
+type SpanMapFunc = fn(SimpleSpan) -> Span;
+fn span_mapper(src: SimpleSpan) -> Span {
+    src.into()
+}
+pub(crate) type StringStream<'a> = MappedSpan<Span, &'a str, SpanMapFunc>;
+pub(crate) type TokenStream<'a> = MappedSpan<Span, &'a [Token], SpanMapFunc>;
 parser_trait_alias!(pub(crate) trait TokenParser<'a, O>: Parser<'a, TokenStream<'a>, O, ParserExtra<'a, Token>>);
-parser_trait_alias!(pub(crate) trait StringParser<'a, O>: Parser<'a, &'a str, O, ParserExtra<'a, char>>);
+parser_trait_alias!(pub(crate) trait StringParser<'a, O>: Parser<'a, StringStream<'a>, O, ParserExtra<'a, char>>);
 
 fn token<'a>() -> impl StringParser<'a, Token> {
     macro_rules! prefixed_idents {
@@ -76,15 +82,9 @@ fn token<'a>() -> impl StringParser<'a, Token> {
                 if !matches!(first, '+' | '-')
                     && let Ok(value) = u64::try_from(value)
                 {
-                    Ok(Token::Number(NumericLiteral {
-                        value,
-                        span: Span::from(span),
-                    }))
+                    Ok(Token::Number(NumericLiteral { value, span }))
                 } else {
-                    Ok(Token::Integer(NumericLiteral {
-                        value,
-                        span: Span::from(span),
-                    }))
+                    Ok(Token::Integer(NumericLiteral { value, span }))
                 }
             })
             .labelled("integer"),
@@ -101,7 +101,7 @@ fn float_literal<'a>() -> impl StringParser<'a, FloatLiteral> {
     prefix
         .then(floating_point_value())
         .map_with(|(prefix, value), extra| FloatLiteral {
-            span: extra.span().into(),
+            span: extra.span(),
             value,
             prefix,
         })
@@ -120,7 +120,7 @@ fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFlo
             })?;
             Ok(NumericLiteral {
                 value: OrderedFloat(value),
-                span: Span::from(span),
+                span,
             })
         })
         .labelled("floating-point number")
@@ -150,35 +150,68 @@ pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Token>> {
 
 #[derive(Debug, thiserror::Error)]
 #[error("Failed to tokenize input")]
-pub struct LexError(Rich<'static, char>);
+pub struct LexError(RichParseError<'static, char>);
 impl LexError {
-    pub(crate) fn from_rich_list(value: Vec<Rich<'_, char>>) -> Self {
+    pub(crate) fn from_rich_list(value: Vec<RichParseError<'_, char>>) -> Self {
         Self::from_rich(value.into_iter().next().expect("empty error list"))
     }
-    pub(crate) fn from_rich(rich: Rich<'_, char>) -> Self {
+    pub(crate) fn from_rich(rich: RichParseError<'_, char>) -> Self {
         LexError(rich.into_owned())
     }
 }
 
+#[doc(hidden)]
+pub(crate) trait IntoStream<'a> {
+    type Stream: Input<'a, Span = Span>;
+    #[allow(
+        clippy::wrong_self_convention,
+        reason = "may interfere with inherent methods"
+    )]
+    fn into_stream(this: Self) -> Self::Stream;
+}
+impl<'a> IntoStream<'a> for &'a str {
+    type Stream = StringStream<'a>;
+    #[inline]
+    fn into_stream(this: Self) -> Self::Stream {
+        this.map_span(span_mapper)
+    }
+}
+impl<'a> IntoStream<'a> for &'a [Token] {
+    type Stream = TokenStream<'a>;
+    #[inline]
+    fn into_stream(this: Self) -> Self::Stream {
+        this.map_span(span_mapper)
+    }
+}
+impl<'a> IntoStream<'a> for &'a Vec<Token> {
+    type Stream = TokenStream<'a>;
+    #[inline]
+    fn into_stream(this: Self) -> Self::Stream {
+        stream(this.as_slice())
+    }
+}
+pub(crate) fn stream<'a, S: IntoStream<'a>>(input: S) -> S::Stream {
+    S::into_stream(input)
+}
 /// Tokenize the specified input.
 pub fn tokenize(text: &str) -> Result<Vec<Token>, LexError> {
     tokenizer()
-        .parse(text)
+        .parse(stream(text))
         .into_result()
         .map_err(LexError::from_rich_list)
 }
 
 fn spanned<'a, T>(
     value: T,
-    extra: &mut MapExtra<'a, '_, &'a str, ParserExtra<'a, char>>,
+    extra: &mut MapExtra<'a, '_, StringStream<'a>, ParserExtra<'a, char>>,
 ) -> Spanned<T> {
     Spanned {
         value,
-        span: extra.span().into(),
+        span: extra.span(),
     }
 }
 fn ident<'a>() -> impl StringParser<'a, Ident> {
-    text::ident()
+    text::ident::<StringStream<'a>, _>()
         .map_with(spanned)
         .map(Ident::from)
         .labelled("identifier")
@@ -234,7 +267,7 @@ mod test {
 
     #[test]
     fn operators() {
-        assert_eq!(token().parse("=").unwrap(), operator!(=).into());
+        assert_eq!(token().parse(stream("=")).unwrap(), operator!(=).into());
         assert_eq!(
             tokenize("= : + z").unwrap(),
             tokens([operator!(=), operator!(:), operator!(+), operator!(z)])

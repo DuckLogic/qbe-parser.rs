@@ -264,7 +264,7 @@ pub struct InvalidOperatorError;
 use crate::lexer::{StringParser, TokenParser};
 pub(crate) use keyword;
 pub(crate) use operator;
-#[expect(unused_imports, reason = "not currently used")]
+#[allow(unused_imports)]
 pub(crate) use short_type_spec;
 
 #[cfg(test)]

@@ -56,7 +56,7 @@ impl Parse for DataDef {
             .then(AlignSpec::parser().or_not())
             .then(body)
             .map_with(|(((linkage, name), align), body), extra| DataDef {
-                span: extra.span().into(),
+                span: extra.span(),
                 linkage,
                 name,
                 align,
@@ -92,7 +92,7 @@ impl Parse for DataField {
             )
             .map_with(|(ty, items), extra| DataField::Regular {
                 ty,
-                span: extra.span().into(),
+                span: extra.span(),
                 items,
             })
             .labelled("regular field");
@@ -100,7 +100,7 @@ impl Parse for DataField {
             .parser()
             .ignore_then(select!(Token::Number(count) => count))
             .map_with(|count, extra| DataField::ZeroInitialize {
-                span: extra.span().into(),
+                span: extra.span(),
                 count,
             })
             .labelled("zero initialized field");
@@ -177,7 +177,7 @@ impl Parse for DataItem {
             .then_ignore(operator!(+).parser())
             .then(SymbolOffset::parser())
             .map_with(|(name, offset), extra| DataItem::SymbolRefWithOffset {
-                span: extra.span().into(),
+                span: extra.span(),
                 name,
                 offset,
             })

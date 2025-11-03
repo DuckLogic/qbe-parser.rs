@@ -2,11 +2,10 @@ use chumsky::Parser;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
-use chumsky::error::Rich;
 use chumsky::input::MapExtra;
 
 use crate::ast::Spanned;
-use crate::lexer::{LexError, Token, TokenParser};
+use crate::lexer::{LexError, RichParseError, Token, TokenParser, TokenStream, stream};
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -26,18 +25,18 @@ impl Display for ParseError {
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum ParseErrorReason {
     #[error("{0}")]
-    Parse(Rich<'static, Token>),
+    Parse(RichParseError<'static, Token>),
     #[error(transparent)]
     Lex(#[from] LexError),
 }
 
 pub(crate) fn spanned<'a, T>(
     value: T,
-    extra: &mut MapExtra<'a, '_, &'a [Token], crate::lexer::ParserExtra<'a, Token>>,
+    extra: &mut MapExtra<'a, '_, TokenStream<'a>, crate::lexer::ParserExtra<'a, Token>>,
 ) -> Spanned<T> {
     Spanned {
         value,
-        span: extra.span().into(),
+        span: extra.span(),
     }
 }
 
@@ -50,17 +49,20 @@ pub(crate) fn parse_str<T: Parse>(text: &str) -> Result<T, ParseError> {
         desc: T::DESC,
         reason: ParseErrorReason::Lex(cause),
     })?;
-    T::parser().parse(&tokens).into_result().map_err(|causes| {
-        let first = causes
-            .into_iter()
-            .next()
-            .expect("empty error list")
-            .into_owned();
-        ParseError {
-            desc: T::DESC,
-            reason: ParseErrorReason::Parse(first),
-        }
-    })
+    T::parser()
+        .parse(stream(&tokens))
+        .into_result()
+        .map_err(|causes| {
+            let first = causes
+                .into_iter()
+                .next()
+                .expect("empty error list")
+                .into_owned();
+            ParseError {
+                desc: T::DESC,
+                reason: ParseErrorReason::Parse(first),
+            }
+        })
 }
 macro_rules! impl_fromstr_via_parse {
     ($($target:ident),+ $(,)?) => {

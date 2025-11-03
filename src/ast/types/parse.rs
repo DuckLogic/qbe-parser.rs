@@ -13,7 +13,7 @@ impl Parse for AlignSpec {
             .ignore_then(select!(Token::Number(number) => number))
             .map_with(|value, extra| AlignSpec {
                 value,
-                span: extra.span().into(),
+                span: extra.span(),
             })
             .labelled(Self::DESC)
     }
@@ -30,7 +30,7 @@ impl Parse for TypeDef {
             .then(AlignSpec::parser().or_not())
             .then(TypeDefBody::parser())
             .map_with(|((name, align), body), extra| TypeDef {
-                span: extra.span().into(),
+                span: extra.span(),
                 body,
                 align,
                 name,
@@ -79,7 +79,7 @@ impl Parse for StructBody {
             .collect::<Vec<_>>()
             .delimited_by(select!(Token::OpenBrace(_)), select!(Token::CloseBrace(_)))
             .map_with(|fields, extra| StructBody {
-                span: extra.span().into(),
+                span: extra.span(),
                 fields,
             })
             .labelled(Self::DESC)
@@ -94,7 +94,7 @@ impl Parse for UnionBody {
             .collect::<Vec<_>>()
             .delimited_by(select!(Token::OpenBrace(_)), select!(Token::CloseBrace(_)))
             .map_with(|variants, extra| UnionBody {
-                span: extra.span().into(),
+                span: extra.span(),
                 variants,
             })
             .labelled("struct body")
@@ -106,7 +106,7 @@ impl Parse for FieldDef {
         FieldType::parser()
             .then(select!(Token::Number(n) => n).or_not())
             .map_with(|(ty, repeated), extra| FieldDef {
-                span: extra.span().into(),
+                span: extra.span(),
                 ty,
                 repeated,
             })
@@ -117,8 +117,7 @@ impl Parse for FieldType {
     const DESC: &'static str = "field type";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
         select!(Token::TypeName(name) => FieldType::Named(name))
-            .or(ExtendedType::parser()
-                .map_with(|tp, extra| FieldType::Extended(tp, extra.span().into())))
+            .or(ExtendedType::parser().map_with(|tp, extra| FieldType::Extended(tp, extra.span())))
             .labelled("field type")
     }
 }
