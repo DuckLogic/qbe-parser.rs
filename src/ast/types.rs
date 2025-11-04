@@ -217,7 +217,7 @@ macro_rules! maybe_named_type {
 maybe_named_type! {
     /// Refers to an ABI type, which is either a [`BaseType`], a [`SubWordType`], or a [`TypeName`].
     #[derive(PartialEq, Eq, Hash)]
-    pub enum AbiTypeRef {
+    pub enum AbiType {
         Named(TypeName),
         Base(BaseType, Span),
         SubWord(SubWordType, Span),

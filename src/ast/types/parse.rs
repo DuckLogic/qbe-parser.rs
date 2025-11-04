@@ -113,16 +113,61 @@ impl Parse for FieldDef {
             .labelled(Self::DESC)
     }
 }
-impl Parse for FieldType {
-    const DESC: &'static str = "field type";
-    fn parser<'a>() -> impl TokenParser<'a, Self> {
-        TypeName::parser()
-            .map(FieldType::Named)
-            .or(ExtendedType::parser().map_with(|tp, extra| FieldType::Extended(tp, extra.span())))
-            .labelled("field type")
+macro_rules! parse_maybe_named_type {
+    (impl Parse for $target:ident {
+        const DESC = $desc:literal;
+        variants {
+            Named(TypeName),
+            $($variant:ident($inner:ty, Span)),+ $(,)?
+        }
+    }) => {
+        impl Parse for $target {
+            const DESC: &'static str = $desc;
+            fn parser<'a>() -> impl TokenParser<'a, Self> {
+                fn _check_variants(t: $target) {
+                    match t {
+                        $target::Named(tp) => {
+                            let _: TypeName = tp;
+                        },
+                        $($target::$variant(inner, s) => {
+                            let _: $inner = inner;
+                            let _: Span = s;
+                        },)*
+                    }
+                }
+                let simple = choice((
+                    $(<$inner>::parser().map_with(|tp, extra| {
+                        $target::$variant(tp, extra.span().into())
+                    }),)*
+                ));
+                TypeName::parser()
+                    .map($target::Named)
+                    .or(simple)
+                    .labelled(Self::DESC)
+            }
+        }
+        impl_fromstr_via_parse!($target);
+    };
+}
+parse_maybe_named_type! {
+    impl Parse for FieldType {
+        const DESC = "field type";
+        variants {
+            Named(TypeName),
+            Extended(ExtendedType, Span),
+        }
     }
 }
-impl_fromstr_via_parse!(FieldType);
+parse_maybe_named_type! {
+    impl Parse for AbiType {
+        const DESC = "abi type";
+        variants {
+            Named(TypeName),
+            Base(BaseType, Span),
+            SubWord(SubWordType, Span),
+        }
+    }
+}
 
 macro_rules! simple_type_parser {
     ($($target:ident { DESC = $desc:literal }),+ $(,)?) => {
@@ -141,6 +186,7 @@ macro_rules! simple_type_parser {
 simple_type_parser!(
     BaseType { DESC = "base type" },
     ExtendedType { DESC = "extended type" },
+    SubWordType { DESC = "sub-word type" },
 );
 
 #[cfg(test)]
