@@ -3,7 +3,7 @@ check: && check-format
     cargo +nightly doc --no-deps --all-features
 
 test: check
-    cargo +nightly nextest run --all-features
+    cargo +nightly nextest run --all-features --no-fail-fast
 
 format:
     cargo fmt --all
