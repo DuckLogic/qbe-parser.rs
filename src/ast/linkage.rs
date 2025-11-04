@@ -1,6 +1,6 @@
 use crate::ast::{Span, StringLiteral};
 use crate::lexer::{TokenParser, keyword};
-use crate::parse::{Parse, impl_fromstr_via_parse};
+use crate::parse::{Parse, impl_fromstr_via_parse, maybe_newline};
 use arrayvec::ArrayVec;
 use chumsky::prelude::*;
 use std::fmt::{self, Display, Formatter, Write};
@@ -48,6 +48,7 @@ impl Parse for Linkage {
     const DESC: &'static str = "linkage";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
         LinkageSpecifier::parser()
+            .then_ignore(maybe_newline())
             .repeated()
             .collect::<Vec<LinkageSpecifier>>()
             .try_map(|specifiers, span| {
@@ -443,7 +444,7 @@ mod test {
             linkage([export(), thread()]),
         );
         assert_eq!(
-            "thread export".parse::<Linkage>().unwrap(),
+            "thread\nexport".parse::<Linkage>().unwrap(),
             linkage([thread(), export()]),
         );
         assert_eq!(

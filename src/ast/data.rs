@@ -2,7 +2,7 @@ use crate::ast::linkage::Linkage;
 use crate::ast::types::{AlignSpec, ExtendedType};
 use crate::ast::{FloatLiteral, GlobalName, Number, NumericLiteral, Span, StringLiteral};
 use crate::lexer::{Token, TokenParser, keyword, operator};
-use crate::parse::{Parse, impl_fromstr_via_parse};
+use crate::parse::{Parse, impl_fromstr_via_parse, maybe_newline};
 use std::fmt::{self, Display, Formatter, Write};
 
 use crate::print::{IndentedPrinter, impl_display_via_print};
@@ -45,15 +45,16 @@ impl Parse for DataDef {
     #[allow(clippy::unused_unit, reason = "part of select macro")]
     fn parser<'a>() -> impl TokenParser<'a, Self> {
         let body = DataField::parser()
+            .padded_by(maybe_newline())
             .separated_by(operator!(,).parser())
             .allow_trailing()
             .collect::<Vec<_>>()
             .delimited_by(just(Token::OpenBrace), just(Token::CloseBrace));
         Linkage::parser()
-            .then_ignore(keyword!(data).parser())
-            .then(GlobalName::parser())
-            .then_ignore(operator!(=).parser())
-            .then(AlignSpec::parser().or_not())
+            .then_ignore(keyword!(data).parser().padded_by(maybe_newline()))
+            .then(GlobalName::parser().padded_by(maybe_newline()))
+            .then_ignore(operator!(=).parser().padded_by(maybe_newline()))
+            .then(AlignSpec::parser().padded_by(maybe_newline()).or_not())
             .then(body)
             .map_with(|(((linkage, name), align), body), extra| DataDef {
                 span: extra.span(),
@@ -174,7 +175,7 @@ impl Parse for DataItem {
 
     fn parser<'a>() -> impl TokenParser<'a, Self> {
         let offset_symbol_ref = GlobalName::parser()
-            .then_ignore(operator!(+).parser())
+            .then_ignore(operator!(+).parser().padded_by(maybe_newline()))
             .then(SymbolOffset::parser())
             .map_with(|(name, offset), extra| DataItem::SymbolRefWithOffset {
                 span: extra.span(),

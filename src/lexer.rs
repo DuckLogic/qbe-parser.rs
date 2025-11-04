@@ -5,6 +5,7 @@ use crate::ast::{
     BlockName, FloatLiteral, FloatPrefix, GlobalName, Ident, Location, NumericLiteral, Span,
     Spanned, StringLiteral, TemporaryName, TypeName,
 };
+use chumsky::combinator::Repeated;
 use chumsky::input::{MapExtra, MappedSpan};
 use chumsky::prelude::*;
 use ordered_float::OrderedFloat;
@@ -27,9 +28,22 @@ fn span_mapper(src: SimpleSpan) -> Span {
 pub(crate) type StringStream<'a> = MappedSpan<Span, &'a str, SpanMapFunc>;
 use crate::lexer::stream::TokenVec;
 pub(crate) use stream::TokenStream;
+
 parser_trait_alias!(pub(crate) trait TokenParser<'a, O>: Parser<'a, TokenStream<'a>, O, ParserExtra<'a, Token>>);
 parser_trait_alias!(pub(crate) trait StringParser<'a, O>: Parser<'a, StringStream<'a>, O, ParserExtra<'a, char>>);
 
+fn require_spacing<'a>() -> impl StringParser<'a, ()> {
+    text::whitespace()
+        .at_least(1)
+        .ignored()
+        .or(end())
+        .rewind()
+        .labelled("spacing")
+}
+/// Require either spacing or a comma.
+fn require_space_like<'a>() -> impl StringParser<'a, ()> {
+    require_spacing().or(just(",").ignored().rewind())
+}
 fn token<'a>() -> impl StringParser<'a, Token> {
     macro_rules! prefixed_idents {
         ($($target:ident),+ $(,)?) => ({
@@ -51,8 +65,8 @@ fn token<'a>() -> impl StringParser<'a, Token> {
         };
     }
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
-    // A single token
-    choice((
+    // A basic (not magic) token
+    let basic_token = choice((
         Keyword::text_parser().map(Token::from).labelled("keyword"),
         // must come before ident and type spec or `d_` might be recognized incorrectly
         float_literal().map(Token::Float),
@@ -86,9 +100,13 @@ fn token<'a>() -> impl StringParser<'a, Token> {
                 }
             })
             .labelled("integer"),
-    ))
-    .labelled("token")
-    .boxed()
+    ));
+    let newline_token = ascii_newline().repeated().at_least(1).to(Token::Newline);
+    basic_token
+        .then_ignore(require_space_like())
+        .or(newline_token)
+        .labelled("token")
+        .boxed()
 }
 fn float_literal<'a>() -> impl StringParser<'a, FloatLiteral> {
     let prefix = choice((
@@ -123,16 +141,46 @@ fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFlo
         })
         .labelled("floating-point number")
 }
+/// Parse a single ASCII newline.
+///
+/// Unlike text::newline, this only accepts ASCII newline operators
+/// that would be recognized by [`str::lines`] ("\r\n" and "\n").
+///
+/// TODO: Contribute this to chumsky?
+fn ascii_newline<'a>() -> impl StringParser<'a, &'a str> {
+    just("\n").or(just("\r\n")).labelled("newline")
+}
+/*type SimpleStringCustom<'a, O> = Custom<
+    for<'i, 'p> fn(
+        &'i mut InputRef<'a, 'p, StringStream<'a>, ParserExtra<'a, char>>,
+    ) -> Result<O, RichParseError<'a, char>>,
+    StringStream<'a>,
+    O,
+    ParserExtra<'a, char>,
+>;*/
+type SingleIgnoredWhitespace<'a> = Boxed<'a, 'a, StringStream<'a>, char, ParserExtra<'a, char>>;
+type IgnoredWhitespace<'a> =
+    Repeated<SingleIgnoredWhitespace<'a>, char, StringStream<'a>, ParserExtra<'a, char>>;
+/// Skips all whitespace that should be ignored.
+///
+/// Includes all whitespace recognized by [`char::is_whitespace`],
+/// except that which is recognized by [`ascii_newline`].
+/// Since a lone "\r" is not accepted as a newline,
+/// it will be ignored here.
+///
+/// TODO: Should we switch to [`text::inline_whitespace`]? It would be much simpler.
+pub fn ignored_whitespace<'a>() -> IgnoredWhitespace<'a> {
+    let single: SingleIgnoredWhitespace<'a> = any()
+        .filter(|c: &char| c.is_whitespace())
+        .and_is(ascii_newline().not())
+        .boxed(); // TODO: Remove boxing
+    single.repeated()
+}
+
 pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
-    // Unlike text::newline, this only accepts ASCII newline operators
-    // TODO: Contribute this to chumsky?
-    let newline = one_of("\r\n")
-        .ignored()
-        .or(just("\r\n").ignored())
-        .labelled("newline");
     let comment = just('#')
-        .then(newline.not().repeated())
-        .then(newline)
+        .then(ascii_newline().not().repeated())
+        .then(ascii_newline())
         .labelled("comment");
     // Loosely based on the tokenizer in the nano_rust example
     // https://github.com/zesterer/chumsky/blob/0.11/examples/nano_rust.rs#L95-L102
@@ -145,7 +193,7 @@ pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
             Spanned { value: token, span }
         })
         .padded_by(comment.repeated())
-        .padded()
+        .padded_by(ignored_whitespace())
         // If we encounter an error, skip and attempt to lex the next character as a token instead.
         // This strategy was copied from the nano_rust example:
         .recover_with(skip_then_retry_until(any().ignored(), end()))
@@ -245,13 +293,102 @@ mod test {
         val.into_iter().map(Into::into).collect()
     }
 
+    const VALID_NEWLINES: [&str; 2] = ["\n", "\r\n"];
+
+    #[test]
+    fn ascii_newline_parser() {
+        for valid in VALID_NEWLINES {
+            assert_eq!(
+                ascii_newline().parse(stream(valid)).into_result(),
+                Ok(valid)
+            );
+        }
+        assert_eq!(
+            ascii_newline()
+                .or_not()
+                .then_ignore(any())
+                .parse(stream("\r"))
+                .unwrap(),
+            None,
+            "should not parse `\r`"
+        );
+    }
+
+    #[test]
+    fn ignored_whitespace_parser() {
+        #[track_caller]
+        fn require_success(text: impl Into<String>) {
+            let text = text.into();
+            assert_eq!(
+                ignored_whitespace()
+                    .to_slice()
+                    .parse(stream(&text))
+                    .unwrap(),
+                text
+            );
+        }
+        require_success(" \r\t ");
+        require_success(' ');
+        require_success("   ");
+        require_success("   \t");
+        require_success('\r');
+        require_success("\r\r");
+        for newline in VALID_NEWLINES {
+            assert_eq!(
+                ignored_whitespace().parse(stream(newline)).into_output(),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn newline_token() {
+        #[track_caller]
+        fn check(text: &str) {
+            assert_eq!(token().parse(stream(text)).unwrap(), Token::Newline);
+        }
+        check("\n");
+        check("\r\n");
+        // ensure multiple newlines are collapsed to a single token
+        check("\n\n\n");
+        check("\r\n\n\r\n\n");
+    }
+
+    /// Test the newline token interspersed with other tokens.
+    #[test]
+    fn newline_token_interspersed() {
+        assert_eq!(
+            tokenize("\n\n+ z \ntype\r\n").unwrap(),
+            tokens([
+                Token::Newline,
+                operator!(+).into(),
+                operator!(z).into(),
+                Token::Newline,
+                keyword!(type).into(),
+                Token::Newline,
+            ])
+        )
+    }
+
     #[test]
     fn operators() {
         assert_eq!(token().parse(stream("=")).unwrap(), operator!(=).into());
         assert_eq!(
             tokenize("= : + z").unwrap(),
             tokens([operator!(=), operator!(:), operator!(+), operator!(z)])
-        )
+        );
+    }
+
+    /// Ensures that tokens cannot be clumped together without triggering an error.
+    #[test]
+    fn clumped_tokens_error() {
+        fn check(text: &str) {
+            let res = tokenize(text);
+            assert!(res.is_err(), "{res:?}");
+        }
+        check("===");
+        check("+-z");
+        check("type=");
     }
 
     #[test]

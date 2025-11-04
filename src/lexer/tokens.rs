@@ -37,6 +37,14 @@ pub enum Token {
     CloseBrace,
     OpenParen,
     CloseParen,
+    //
+    // magic
+    //
+    /// Represents a series of one or more newlines.
+    ///
+    /// The QBE IR uses newlines to separate instructions,
+    /// and restricts the usage of newlines in other locations.
+    Newline,
 }
 impl Token {
     #[inline]
@@ -48,8 +56,10 @@ macro_rules! token_impls {
     (
         complex { $($complex_variant:ident),+ $(,)? },
         wraps_enum { $($wrap_variant:ident),+ $(,)? },
-        simple { $($simple_variant:ident  => $delim:literal),+ $(,)? } $(,)?
-    ) => {
+        simple { $($simple_variant:ident  => $value:literal),+ $(,)? },
+        magic { $($magic_variant:ident => $magic_text:literal as $desc:literal),+ $(,)? } $(,)?
+    )
+    => {
         impl Token {
             pub fn span(&self) -> Option<Span> {
                 #[deny(unreachable_patterns)]
@@ -57,15 +67,48 @@ macro_rules! token_impls {
                     $(Self::$complex_variant(inner) => Some(inner.span()),)*
                     $(Self::$wrap_variant(_) => None,)*
                     $(Self::$simple_variant => None,)*
+                    $(Self::$magic_variant => None,)*
                 }
             }
+            /// If the token is "magic" and has special behavior.
+            #[inline]
+            pub fn is_magic(&self) -> bool {
+                match self {
+                    $(Self::$magic_variant => true,)*
+                    _ => false,
+                }
+            }
+            /// The text of the token.
+            ///
+            /// This will differ from the [Display] impl only if the token is [magic](Self::is_magic).
+            #[inline]
+            pub fn text(&self) -> impl Display + '_ {
+                struct Text<'a>(&'a Token);
+                impl Display for Text<'_> {
+                    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+                        match self.0 {
+                            $(Token::$magic_variant => f.write_str($magic_text),)+
+                            _ => {
+                                assert!(!self.0.is_magic());
+                                write!(f, "{}", self.0)
+                            }
+                        }
+                    }
+                }
+                Text(self)
+            }
         }
+        /// Display a human-readable description of the token.
+        ///
+        /// This is either the text of the token or `<desc>` if the token is magic.
+        /// Use [`Token::text`] if you want the actual text of the token.
         impl Display for Token {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
                 match self {
                     $(Self::$complex_variant(inner) => Display::fmt(inner, f),)*
                     $(Self::$wrap_variant(inner) => Display::fmt(inner, f),)+
-                    $(Self::$simple_variant => Display::fmt(&$delim, f),)+
+                    $(Self::$simple_variant => Display::fmt(&$value, f),)+
+                    $(Self::$magic_variant => f.write_str($desc),)+
                 }
             }
         }
@@ -93,6 +136,9 @@ token_impls! {
         CloseBrace => '}',
         OpenParen => '(',
         CloseParen => ')',
+    },
+    magic {
+        Newline => "\n" as "<newline>",
     }
 }
 macro_rules! token_wrapper_from {
@@ -166,7 +212,7 @@ macro_rules! define_string_enum {
         });
     };
     (@nomacro enum $target:ident {
-        // TODO: The `=>` should be niehter `+`, nor `?`, but exactly once
+        // TODO: The `=>` should be neither `+`, nor `?`, but exactly once
         $($kw:ident => $text:expr),+ $(,)?
     }) => {
         #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
@@ -312,9 +358,19 @@ pub(crate) use short_type_spec;
 
 #[cfg(test)]
 mod test {
+    use crate::lexer::Token;
+
     #[test]
     fn token_macros() {
         assert_eq!(operator!(=).text(), "=");
         assert_eq!(keyword!(align).text(), "align");
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(operator!(=).to_token().to_string(), "=");
+        assert_eq!(operator!(,).to_token().to_string(), ",");
+        assert_eq!(short_type_spec!(w).to_token().to_string(), "w");
+        assert_eq!(Token::Newline.to_string(), "<newline>");
     }
 }

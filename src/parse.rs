@@ -1,8 +1,8 @@
-use chumsky::Parser;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
 use chumsky::input::MapExtra;
+use chumsky::prelude::*;
 
 use crate::ast::Spanned;
 use crate::lexer::{LexError, Token, TokenStream};
@@ -30,6 +30,13 @@ pub(crate) enum ParseErrorReason {
     Parse(RichParseError<'static, Token>),
     #[error(transparent)]
     Lex(#[from] LexError),
+}
+
+/// Allow a [`Token::Newline`].
+///
+/// Shorthand for `just(Token::Newline).or_not().ignored()`
+pub fn maybe_newline<'a>() -> impl TokenParser<'a, ()> {
+    just(Token::Newline).or_not().ignored()
 }
 
 pub(crate) fn spanned<'a, T>(
