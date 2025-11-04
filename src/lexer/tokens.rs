@@ -29,12 +29,20 @@ pub enum Token {
     //
     // other
     //
-    Keyword(Keyword, Span),
-    ShortTypeSpec(ShortTypeSpec, Span),
-    Operator(Operator, Span),
+    Keyword(Keyword),
+    ShortTypeSpec(ShortTypeSpec),
+    Operator(Operator),
     // delimiters
-    OpenBrace(Span),
-    CloseBrace(Span),
+    OpenBrace,
+    CloseBrace,
+    OpenParen,
+    CloseParen,
+}
+impl Token {
+    #[inline]
+    pub(crate) fn number<'a>() -> impl TokenParser<'a, NumericLiteral<u64>> {
+        select!(Token::Number(num) => num).labelled("number (unsigned)")
+    }
 }
 macro_rules! token_impls {
     (
@@ -43,12 +51,12 @@ macro_rules! token_impls {
         simple { $($simple_variant:ident  => $delim:literal),+ $(,)? } $(,)?
     ) => {
         impl Token {
-            pub fn span(&self) -> Span {
+            pub fn span(&self) -> Option<Span> {
                 #[deny(unreachable_patterns)]
                 match self {
-                    $(Self::$complex_variant(inner) => inner.span(),)*
-                    $(Self::$wrap_variant(_, span) => *span,)*
-                    $(Self::$simple_variant(span) => *span,)*
+                    $(Self::$complex_variant(inner) => Some(inner.span()),)*
+                    $(Self::$wrap_variant(_) => None,)*
+                    $(Self::$simple_variant => None,)*
                 }
             }
         }
@@ -56,8 +64,8 @@ macro_rules! token_impls {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
                 match self {
                     $(Self::$complex_variant(inner) => Display::fmt(inner, f),)*
-                    $(Self::$wrap_variant(inner, _) => Display::fmt(inner, f),)+
-                    $(Self::$simple_variant(_) => f.write_str($delim),)+
+                    $(Self::$wrap_variant(inner) => Display::fmt(inner, f),)+
+                    $(Self::$simple_variant => Display::fmt(&$delim, f),)+
                 }
             }
         }
@@ -81,21 +89,33 @@ token_impls! {
         ShortTypeSpec,
     },
     simple {
-        OpenBrace => "{",
-        CloseBrace => "}",
+        OpenBrace => '{',
+        CloseBrace => '}',
+        OpenParen => '(',
+        CloseParen => ')',
     }
 }
-macro_rules! token_from_simple {
+macro_rules! token_wrapper_from {
     ($($variant:ident),+ $(,)?) => {
         $(impl From<$variant> for Token {
             #[inline]
             fn from(value: $variant) -> Self {
                 Token::$variant(value)
             }
+        }
+        impl From<$variant> for Spanned<Token> {
+            #[inline]
+            fn from(value: $variant) -> Self {
+                let span = value.span();
+                Spanned {
+                    value: Token::$variant(value),
+                    span,
+                }
+            }
         })*
     };
 }
-token_from_simple! {
+token_wrapper_from! {
     Ident,
     TypeName,
     GlobalName,
@@ -106,6 +126,14 @@ token_from_simple! {
 impl From<FloatLiteral> for Token {
     fn from(value: FloatLiteral) -> Self {
         Token::Float(value)
+    }
+}
+impl From<FloatLiteral> for Spanned<Token> {
+    fn from(value: FloatLiteral) -> Self {
+        Spanned {
+            span: value.span(),
+            value: Token::Float(value),
+        }
     }
 }
 #[allow(unused)]
@@ -154,9 +182,17 @@ macro_rules! define_string_enum {
                     $(Self::$kw => $text),*
                 }
             }
-            /// Parses this token, returning the [`Span`] of the value.o
-            pub(crate) fn parser<'a>(&self) -> impl TokenParser<'a, Span> {
-                select!(Token::$target(x, span) if x == *self => span)
+            #[inline]
+            pub fn to_token(self) -> Token {
+                Token::$target(self)
+            }
+            /// Parses this token, returning the [`Span`] of the value.
+            ///
+            /// Equivalent to calling [`just`] with [`Self::to_token`].
+            /// This gives superior error messages to using [`select!`].
+            #[inline]
+            pub(crate) fn parser<'a>(self) -> impl TokenParser<'a, Span> {
+                just(self.to_token()).to_span()
             }
             pub(super) fn text_parser<'a>() -> impl StringParser<'a, $target> {
                 // TODO: Would be nice to cache the result directly,
@@ -177,14 +213,19 @@ macro_rules! define_string_enum {
                 choice(parsers)
             }
         }
-        impl From<Spanned<$target>> for Token {
-            fn from(value: Spanned<$target>) -> Self {
-                Token::$target(value.value, value.span)
+        impl From<$target> for Token {
+            #[inline]
+            fn from(value: $target) -> Self {
+                value.to_token()
             }
         }
-        impl From<$target> for Token {
+        impl From<$target> for Spanned<Token> {
+            #[inline]
             fn from(value: $target) -> Self {
-                Token::$target(value, Span::MISSING)
+                Spanned {
+                    value: value.to_token(),
+                    span: Span::MISSING,
+                }
             }
         }
         impl FromStr for $target {
@@ -214,6 +255,7 @@ define_keyword_enum!(
         Align,
         Data,
         Export,
+        Function,
         Section,
         Thread,
         Type,
@@ -247,6 +289,7 @@ define_string_enum!(enum Operator {
     Comma(,),
     Plus(+),
     ZeroInitMarker(z),
+    Ellipsis(...),
 });
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("Keyword is not valid")]

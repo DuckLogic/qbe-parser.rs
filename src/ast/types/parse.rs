@@ -10,7 +10,7 @@ impl Parse for AlignSpec {
     fn parser<'a>() -> impl TokenParser<'a, AlignSpec> {
         keyword!(align)
             .parser()
-            .ignore_then(select!(Token::Number(number) => number))
+            .ignore_then(Token::number())
             .map_with(|value, extra| AlignSpec {
                 value,
                 span: extra.span(),
@@ -25,7 +25,7 @@ impl Parse for TypeDef {
     fn parser<'a>() -> impl TokenParser<'a, TypeDef> {
         keyword!(type)
             .parser()
-            .ignore_then(select!(Token::TypeName(name) => name))
+            .ignore_then(TypeName::parser())
             .then_ignore(operator!(=).parser())
             .then(AlignSpec::parser().or_not())
             .then(TypeDefBody::parser())
@@ -63,8 +63,8 @@ impl Parse for TypeDefBody {
 impl Parse for OpaqueBody {
     const DESC: &'static str = "opaque type body";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        select!(Token::Number(n) => n)
-            .delimited_by(select!(Token::OpenBrace(_)), select!(Token::CloseBrace(_)))
+        Token::number()
+            .delimited_by(just(Token::OpenBrace), just(Token::CloseBrace))
             .map_with(spanned)
             .map(|Spanned { value: size, span }| OpaqueBody { span, size })
             .labelled(Self::DESC)
@@ -77,7 +77,7 @@ impl Parse for StructBody {
             .separated_by(operator!(,).parser())
             .allow_trailing()
             .collect::<Vec<_>>()
-            .delimited_by(select!(Token::OpenBrace(_)), select!(Token::CloseBrace(_)))
+            .delimited_by(just(Token::OpenBrace), just(Token::CloseBrace))
             .map_with(|fields, extra| StructBody {
                 span: extra.span(),
                 fields,
@@ -92,7 +92,7 @@ impl Parse for UnionBody {
             .repeated()
             .at_least(1)
             .collect::<Vec<_>>()
-            .delimited_by(select!(Token::OpenBrace(_)), select!(Token::CloseBrace(_)))
+            .delimited_by(just(Token::OpenBrace), just(Token::CloseBrace))
             .map_with(|variants, extra| UnionBody {
                 span: extra.span(),
                 variants,
@@ -104,7 +104,7 @@ impl Parse for FieldDef {
     const DESC: &'static str = "field definition";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
         FieldType::parser()
-            .then(select!(Token::Number(n) => n).or_not())
+            .then(Token::number().or_not())
             .map_with(|(ty, repeated), extra| FieldDef {
                 span: extra.span(),
                 ty,
@@ -116,7 +116,8 @@ impl Parse for FieldDef {
 impl Parse for FieldType {
     const DESC: &'static str = "field type";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        select!(Token::TypeName(name) => FieldType::Named(name))
+        TypeName::parser()
+            .map(FieldType::Named)
             .or(ExtendedType::parser().map_with(|tp, extra| FieldType::Extended(tp, extra.span())))
             .labelled("field type")
     }
@@ -128,7 +129,7 @@ macro_rules! simple_type_parser {
         $(impl Parse for $target {
             const DESC: &'static str = $desc;
             fn parser<'a>() -> impl TokenParser<'a, Self> {
-                select!(Token::ShortTypeSpec(spec, _) => spec)
+                select!(Token::ShortTypeSpec(spec) => spec)
                     .try_map(|spec, span| spec.try_into().map_err(|reason| {
                         Rich::custom(span, reason)
                     }))

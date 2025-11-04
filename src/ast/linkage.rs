@@ -1,5 +1,5 @@
 use crate::ast::{Span, StringLiteral};
-use crate::lexer::{Token, TokenParser, keyword};
+use crate::lexer::{TokenParser, keyword};
 use crate::parse::{Parse, impl_fromstr_via_parse};
 use arrayvec::ArrayVec;
 use chumsky::prelude::*;
@@ -26,8 +26,8 @@ impl Parse for LinkageSection {
     fn parser<'a>() -> impl TokenParser<'a, Self> {
         keyword!(section)
             .parser()
-            .ignore_then(select!(Token::StringLiteral(s) => s))
-            .then(select!(Token::StringLiteral(s) => s).or_not())
+            .ignore_then(StringLiteral::parser())
+            .then(StringLiteral::parser().or_not())
             .map_with(|(name, flags), extra| LinkageSection {
                 name,
                 flags,

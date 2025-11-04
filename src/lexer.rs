@@ -27,7 +27,6 @@ fn span_mapper(src: SimpleSpan) -> Span {
 pub(crate) type StringStream<'a> = MappedSpan<Span, &'a str, SpanMapFunc>;
 use crate::lexer::stream::TokenVec;
 pub(crate) use stream::TokenStream;
-
 parser_trait_alias!(pub(crate) trait TokenParser<'a, O>: Parser<'a, TokenStream<'a>, O, ParserExtra<'a, Token>>);
 parser_trait_alias!(pub(crate) trait StringParser<'a, O>: Parser<'a, StringStream<'a>, O, ParserExtra<'a, char>>);
 
@@ -48,31 +47,27 @@ fn token<'a>() -> impl StringParser<'a, Token> {
     }
     macro_rules! delimiter {
         ($txt:literal => $variant:ident) => {
-            just($txt)
-                .map_with(spanned)
-                .map(|val| Token::$variant(val.span))
+            just($txt).to(Token::$variant)
         };
     }
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
     // A single token
     choice((
-        Keyword::text_parser()
-            .map_with(spanned)
-            .map(Token::from)
-            .labelled("keyword"),
+        Keyword::text_parser().map(Token::from).labelled("keyword"),
         // must come before ident and type spec or `d_` might be recognized incorrectly
         float_literal().map(Token::Float),
         ShortTypeSpec::text_parser()
-            .map_with(spanned)
             .map(Token::from)
             .labelled("type specifier"),
         prefixed_idents,
-        Operator::text_parser().map_with(spanned).map(Token::from),
+        Operator::text_parser().map(Token::from),
         // must come after Operator since `z` is an operator
         ident().map(Token::Ident),
         string_literal().map(Token::StringLiteral),
         delimiter!("{" => OpenBrace),
         delimiter!("}" => CloseBrace),
+        delimiter!("(" => OpenParen),
+        delimiter!(")" => CloseParen),
         one_of("+-")
             .or_not()
             .ignore_then(text::int(10))
@@ -142,7 +137,13 @@ pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
     // Loosely based on the tokenizer in the nano_rust example
     // https://github.com/zesterer/chumsky/blob/0.11/examples/nano_rust.rs#L95-L102
     token()
-        .map_with(spanned)
+        .map_with(|token, extra| {
+            let span = extra.span();
+            if let Some(existing_span) = token.span() {
+                assert_eq!(existing_span.eq(), span.eq(), "Inconsistent Token span");
+            }
+            Spanned { value: token, span }
+        })
         .padded_by(comment.repeated())
         .padded()
         // If we encounter an error, skip and attempt to lex the next character as a token instead.

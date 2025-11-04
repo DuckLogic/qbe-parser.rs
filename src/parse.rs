@@ -5,7 +5,9 @@ use std::fmt::{Display, Formatter};
 use chumsky::input::MapExtra;
 
 use crate::ast::Spanned;
-use crate::lexer::{LexError, RichParseError, Token, TokenParser, TokenStream};
+use crate::lexer::{LexError, Token, TokenStream};
+
+pub(crate) use crate::lexer::{RichParseError, TokenParser};
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -65,7 +67,7 @@ pub(crate) fn parse_str<T: Parse>(text: &str) -> Result<T, ParseError> {
         })
 }
 macro_rules! impl_fromstr_via_parse {
-    ($($target:ident),+ $(,)?) => {
+    ($($target:path),+ $(,)?) => {
         $(impl std::str::FromStr for $target {
             type Err = crate::parse::ParseError;
             fn from_str(s: &str) -> Result<Self, Self::Err> {

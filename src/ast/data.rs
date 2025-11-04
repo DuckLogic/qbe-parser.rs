@@ -48,10 +48,10 @@ impl Parse for DataDef {
             .separated_by(operator!(,).parser())
             .allow_trailing()
             .collect::<Vec<_>>()
-            .delimited_by(select!(Token::OpenBrace(_)), select!(Token::CloseBrace(_)));
+            .delimited_by(just(Token::OpenBrace), just(Token::CloseBrace));
         Linkage::parser()
             .then_ignore(keyword!(data).parser())
-            .then(select!(Token::GlobalName(name) => name))
+            .then(GlobalName::parser())
             .then_ignore(operator!(=).parser())
             .then(AlignSpec::parser().or_not())
             .then(body)
@@ -98,7 +98,7 @@ impl Parse for DataField {
             .labelled("regular field");
         let zero_init = operator!(z)
             .parser()
-            .ignore_then(select!(Token::Number(count) => count))
+            .ignore_then(Token::number())
             .map_with(|count, extra| DataField::ZeroInitialize {
                 span: extra.span(),
                 count,
@@ -146,7 +146,7 @@ impl Parse for SymbolOffset {
     const DESC: &'static str = "symbol offset";
 
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        select!(Token::Number(value) => SymbolOffset(value))
+        Token::number().map(SymbolOffset)
     }
 }
 impl Display for SymbolOffset {
@@ -173,7 +173,7 @@ impl Parse for DataItem {
     const DESC: &'static str = "data item";
 
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        let offset_symbol_ref = select!(Token::GlobalName(name) => name)
+        let offset_symbol_ref = GlobalName::parser()
             .then_ignore(operator!(+).parser())
             .then(SymbolOffset::parser())
             .map_with(|(name, offset), extra| DataItem::SymbolRefWithOffset {
@@ -184,7 +184,7 @@ impl Parse for DataItem {
             .labelled("symbol and offset");
         choice((
             offset_symbol_ref,
-            select!(Token::StringLiteral(literal) => DataItem::String(literal)),
+            StringLiteral::parser().map(DataItem::String),
             Constant::parser().map(DataItem::Constant),
         ))
         .labelled(Self::DESC)

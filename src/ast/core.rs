@@ -1,5 +1,6 @@
 //! The core AST types.
 
+use chumsky::Parser;
 use ordered_float::OrderedFloat;
 use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display, Formatter, Write};
@@ -29,7 +30,10 @@ impl<T> Spanned<T> {
 }
 impl<T: Debug> Debug for Spanned<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Spanned").field(&self.value).finish()
+        f.debug_tuple("Spanned")
+            .field(&self.value)
+            .field(&self.span)
+            .finish()
     }
 }
 impl<T: Display> Display for Spanned<T> {
@@ -134,11 +138,26 @@ impl Ident {
         }
         Ident { text, span }
     }
+    /// Get a string representation of this [`Ident`],
+    /// equivalent to the [`Display`] impl.
+    ///
+    /// Not present on prefixed idents like [`TemporaryName`],
+    /// as those also have a prefix.
+    #[inline]
+    pub fn as_str(&self) -> &'_ str {
+        &self.text
+    }
 }
 opaque_string_wrapper!(Ident);
 impl Display for Ident {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_str(&self.text)
+    }
+}
+impl Parse for Ident {
+    const DESC: &'static str = "identifier";
+    fn parser<'a>() -> impl TokenParser<'a, Self> {
+        chumsky::select!(Token::Ident(ref name) => name.clone()).labelled(Self::DESC)
     }
 }
 
@@ -161,6 +180,12 @@ impl StringLiteral {
     }
 }
 opaque_string_wrapper!(StringLiteral);
+impl Parse for StringLiteral {
+    const DESC: &'static str = "string literal";
+    fn parser<'a>() -> impl TokenParser<'a, Self> {
+        chumsky::select!(Token::StringLiteral(str) => str).labelled(Self::DESC)
+    }
+}
 impl Display for StringLiteral {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.write_char('"')?;
@@ -277,7 +302,7 @@ impl Display for FloatLiteral {
 impl Parse for FloatLiteral {
     const DESC: &'static str = "float literal";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        chumsky::select!(Token::Float(literal) => literal)
+        chumsky::select!(Token::Float(literal) => literal).labelled(Self::DESC)
     }
 }
 impl_fromstr_via_parse!(FloatLiteral);
@@ -305,7 +330,7 @@ impl_numtype!(
 );
 
 macro_rules! prefixed_ident_type {
-    ($target:ident, $prefix:literal) => {
+    ($target:ident, PREFIX = $prefix:literal, DESC = $desc:literal) => {
         #[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
         pub struct $target {
             ident: Ident,
@@ -359,6 +384,13 @@ macro_rules! prefixed_ident_type {
                 res
             }
         }
+        impl Parse for $target {
+            const DESC: &'static str = $desc;
+            fn parser<'a>() -> impl TokenParser<'a, Self> {
+                use chumsky::Parser;
+                chumsky::select!(Token::$target(val) => val).labelled(Self::DESC)
+            }
+        }
         impl_ident_like!($target);
         impl Display for $target {
             fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -368,7 +400,7 @@ macro_rules! prefixed_ident_type {
         }
     };
 }
-prefixed_ident_type!(TypeName, ':');
-prefixed_ident_type!(GlobalName, '$');
-prefixed_ident_type!(TemporaryName, '%');
-prefixed_ident_type!(BlockName, '@');
+prefixed_ident_type!(TypeName, PREFIX = ':', DESC = "type name");
+prefixed_ident_type!(GlobalName, PREFIX = '$', DESC = "global name");
+prefixed_ident_type!(TemporaryName, PREFIX = '%', DESC = "temporary name");
+prefixed_ident_type!(BlockName, PREFIX = '@', DESC = "block name");
