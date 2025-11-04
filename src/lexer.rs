@@ -8,6 +8,7 @@ use crate::ast::{
 use chumsky::combinator::Repeated;
 use chumsky::input::{MapExtra, MappedSpan};
 use chumsky::prelude::*;
+use chumsky::primitive::OneOf;
 use ordered_float::OrderedFloat;
 pub(crate) use tokens::{Keyword, Operator, ShortTypeSpec, Token};
 pub(crate) use tokens::{keyword, operator};
@@ -150,31 +151,15 @@ fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFlo
 fn ascii_newline<'a>() -> impl StringParser<'a, &'a str> {
     just("\n").or(just("\r\n")).labelled("newline")
 }
-/*type SimpleStringCustom<'a, O> = Custom<
-    for<'i, 'p> fn(
-        &'i mut InputRef<'a, 'p, StringStream<'a>, ParserExtra<'a, char>>,
-    ) -> Result<O, RichParseError<'a, char>>,
-    StringStream<'a>,
-    O,
-    ParserExtra<'a, char>,
->;*/
-type SingleIgnoredWhitespace<'a> = Boxed<'a, 'a, StringStream<'a>, char, ParserExtra<'a, char>>;
+type SingleIgnoredWhitespace<'a> = OneOf<[char; 2], StringStream<'a>, ParserExtra<'a, char>>;
 type IgnoredWhitespace<'a> =
     Repeated<SingleIgnoredWhitespace<'a>, char, StringStream<'a>, ParserExtra<'a, char>>;
 /// Skips all whitespace that should be ignored.
 ///
-/// Includes all whitespace recognized by [`char::is_whitespace`],
-/// except that which is recognized by [`ascii_newline`].
-/// Since a lone "\r" is not accepted as a newline,
-/// it will be ignored here.
-///
-/// TODO: Should we switch to [`text::inline_whitespace`]? It would be much simpler.
+/// Includes only tabs and spaces,
+/// as that is all that is allowed by the QBE standard.
 pub fn ignored_whitespace<'a>() -> IgnoredWhitespace<'a> {
-    let single: SingleIgnoredWhitespace<'a> = any()
-        .filter(|c: &char| c.is_whitespace())
-        .and_is(ascii_newline().not())
-        .boxed(); // TODO: Remove boxing
-    single.repeated()
+    one_of(['\t', ' ']).repeated()
 }
 
 pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
