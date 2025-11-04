@@ -1,8 +1,9 @@
+mod stream;
 pub mod tokens;
 
 use crate::ast::{
-    BlockName, FloatLiteral, FloatPrefix, GlobalName, Ident, NumericLiteral, Span, Spanned,
-    StringLiteral, TemporaryName, TypeName,
+    BlockName, FloatLiteral, FloatPrefix, GlobalName, Ident, Location, NumericLiteral, Span,
+    Spanned, StringLiteral, TemporaryName, TypeName,
 };
 use chumsky::input::{MapExtra, MappedSpan};
 use chumsky::prelude::*;
@@ -24,7 +25,9 @@ fn span_mapper(src: SimpleSpan) -> Span {
     src.into()
 }
 pub(crate) type StringStream<'a> = MappedSpan<Span, &'a str, SpanMapFunc>;
-pub(crate) type TokenStream<'a> = MappedSpan<Span, &'a [Token], SpanMapFunc>;
+use crate::lexer::stream::TokenVec;
+pub(crate) use stream::TokenStream;
+
 parser_trait_alias!(pub(crate) trait TokenParser<'a, O>: Parser<'a, TokenStream<'a>, O, ParserExtra<'a, Token>>);
 parser_trait_alias!(pub(crate) trait StringParser<'a, O>: Parser<'a, StringStream<'a>, O, ParserExtra<'a, char>>);
 
@@ -125,7 +128,7 @@ fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFlo
         })
         .labelled("floating-point number")
 }
-pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Token>> {
+pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
     // Unlike text::newline, this only accepts ASCII newline operators
     // TODO: Contribute this to chumsky?
     let newline = one_of("\r\n")
@@ -139,6 +142,7 @@ pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Token>> {
     // Loosely based on the tokenizer in the nano_rust example
     // https://github.com/zesterer/chumsky/blob/0.11/examples/nano_rust.rs#L95-L102
     token()
+        .map_with(spanned)
         .padded_by(comment.repeated())
         .padded()
         // If we encounter an error, skip and attempt to lex the next character as a token instead.
@@ -160,47 +164,22 @@ impl LexError {
     }
 }
 
-#[doc(hidden)]
-pub(crate) trait IntoStream<'a> {
-    type Stream: Input<'a, Span = Span>;
-    #[allow(
-        clippy::wrong_self_convention,
-        reason = "may interfere with inherent methods"
-    )]
-    fn into_stream(this: Self) -> Self::Stream;
-}
-impl<'a> IntoStream<'a> for &'a str {
-    type Stream = StringStream<'a>;
-    #[inline]
-    fn into_stream(this: Self) -> Self::Stream {
-        this.map_span(span_mapper)
-    }
-}
-impl<'a> IntoStream<'a> for &'a [Token] {
-    type Stream = TokenStream<'a>;
-    #[inline]
-    fn into_stream(this: Self) -> Self::Stream {
-        this.map_span(span_mapper)
-    }
-}
-impl<'a> IntoStream<'a> for &'a Vec<Token> {
-    type Stream = TokenStream<'a>;
-    #[inline]
-    fn into_stream(this: Self) -> Self::Stream {
-        stream(this.as_slice())
-    }
-}
-pub(crate) fn stream<'a, S: IntoStream<'a>>(input: S) -> S::Stream {
-    S::into_stream(input)
+/// Create a [`StringStream`] from a string.
+///
+/// Use [`TokenVec::as_stream`] for tokens.
+#[inline]
+pub(crate) fn stream(input: &str) -> StringStream<'_> {
+    input.map_span(span_mapper)
 }
 /// Tokenize the specified input.
-pub fn tokenize(text: &str) -> Result<Vec<Token>, LexError> {
+pub fn tokenize(text: &str) -> Result<TokenVec, LexError> {
     tokenizer()
         .parse(stream(text))
         .into_result()
+        .map(|tokens| TokenVec::from_raw_parts(tokens, Location::from_byte(text.len())))
         .map_err(LexError::from_rich_list)
 }
-
+#[inline]
 fn spanned<'a, T>(
     value: T,
     extra: &mut MapExtra<'a, '_, StringStream<'a>, ParserExtra<'a, char>>,

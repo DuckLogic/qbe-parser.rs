@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use chumsky::input::MapExtra;
 
 use crate::ast::Spanned;
-use crate::lexer::{LexError, RichParseError, Token, TokenParser, TokenStream, stream};
+use crate::lexer::{LexError, RichParseError, Token, TokenParser, TokenStream};
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -50,7 +50,7 @@ pub(crate) fn parse_str<T: Parse>(text: &str) -> Result<T, ParseError> {
         reason: ParseErrorReason::Lex(cause),
     })?;
     T::parser()
-        .parse(stream(&tokens))
+        .parse(tokens.as_stream())
         .into_result()
         .map_err(|causes| {
             let first = causes

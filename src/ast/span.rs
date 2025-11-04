@@ -310,6 +310,20 @@ impl Span {
             (old_byte_range.start + start_offset)..(old_byte_range.start + end_offset);
         Self::from_byte_range(new_byte_range)
     }
+
+    /// The starting location of the span (inclusive),
+    /// or [`Location::MISSING`] if missing.
+    #[inline]
+    pub fn start(&self) -> Location {
+        self.start
+    }
+
+    /// The ending location of the span (exclusive),
+    /// or [`Location::MISSING`] if missing.
+    #[inline]
+    pub fn end(&self) -> Location {
+        self.end
+    }
 }
 impl From<chumsky::span::SimpleSpan> for Span {
     #[inline]
