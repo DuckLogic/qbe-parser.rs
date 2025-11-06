@@ -6,9 +6,9 @@ use crate::ast::{
     Spanned, StringLiteral, TemporaryName, TypeName,
 };
 use chumsky::combinator::Repeated;
+use chumsky::error::LabelError;
 use chumsky::input::{MapExtra, MappedSpan};
 use chumsky::prelude::*;
-use chumsky::primitive::OneOf;
 use ordered_float::OrderedFloat;
 pub(crate) use tokens::{Keyword, Operator, ShortTypeSpec, Token};
 pub(crate) use tokens::{keyword, operator};
@@ -151,15 +151,33 @@ fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFlo
 fn ascii_newline<'a>() -> impl StringParser<'a, &'a str> {
     just("\n").or(just("\r\n")).labelled("newline")
 }
-type SingleIgnoredWhitespace<'a> = OneOf<[char; 2], StringStream<'a>, ParserExtra<'a, char>>;
-type IgnoredWhitespace<'a> =
-    Repeated<SingleIgnoredWhitespace<'a>, char, StringStream<'a>, ParserExtra<'a, char>>;
-/// Skips all whitespace that should be ignored.
+type SingleInlineWhitespace<'a> = Boxed<'a, 'a, StringStream<'a>, char, ParserExtra<'a, char>>;
+type InlineWhitespace<'a> =
+    Repeated<SingleInlineWhitespace<'a>, char, StringStream<'a>, ParserExtra<'a, char>>;
+/// Parses a single character of [`inline_whitespace`],
+/// giving an error for other types of whitespace.
 ///
-/// Includes only tabs and spaces,
-/// as that is all that is allowed by the QBE standard.
-pub fn ignored_whitespace<'a>() -> IgnoredWhitespace<'a> {
-    one_of(['\t', ' ']).repeated()
+/// Separated from [`inline_whitespace`] mainly for testing.
+fn single_inline_whitespace<'a>() -> SingleInlineWhitespace<'a> {
+    const ALLOWED_WHITESPACE: [char; 2] = ['\t', ' '];
+    let allowed_whitespace = one_of(ALLOWED_WHITESPACE);
+    let forbidden_whitespace = any()
+        .filter(|c: &char| c.is_whitespace() && !ALLOWED_WHITESPACE.contains(c))
+        .and_is(ascii_newline().not())
+        .validate(|c, extra, emitter| {
+            emitter.emit(LabelError::<StringStream<'a>, _>::expected_found(
+                ALLOWED_WHITESPACE,
+                Some(c.into()),
+                extra.span(),
+            ));
+            ' ' // treat as a space
+        });
+    allowed_whitespace.or(forbidden_whitespace).boxed()
+}
+/// Skips all inline whitespace (tabs and spaces),
+/// giving an error for any other type of whitespace.
+pub fn inline_whitespace<'a>() -> InlineWhitespace<'a> {
+    single_inline_whitespace().repeated()
 }
 
 pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
@@ -178,7 +196,7 @@ pub(crate) fn tokenizer<'a>() -> impl StringParser<'a, Vec<Spanned<Token>>> {
             Spanned { value: token, span }
         })
         .padded_by(comment.repeated())
-        .padded_by(ignored_whitespace())
+        .padded_by(inline_whitespace())
         // If we encounter an error, skip and attempt to lex the next character as a token instead.
         // This strategy was copied from the nano_rust example:
         .recover_with(skip_then_retry_until(any().ignored(), end()))
@@ -273,6 +291,7 @@ fn string_literal<'a>() -> impl StringParser<'a, StringLiteral> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use chumsky::error::{RichPattern, RichReason};
 
     fn tokens(val: impl IntoIterator<Item: Into<Token>>) -> Vec<Token> {
         val.into_iter().map(Into::into).collect()
@@ -305,23 +324,87 @@ mod test {
         fn require_success(text: impl Into<String>) {
             let text = text.into();
             assert_eq!(
-                ignored_whitespace()
-                    .to_slice()
-                    .parse(stream(&text))
-                    .unwrap(),
+                inline_whitespace().to_slice().parse(stream(&text)).unwrap(),
                 text
             );
         }
-        require_success(" \r\t ");
+        require_success(" \t ");
         require_success(' ');
         require_success("   ");
         require_success("   \t");
-        require_success('\r');
-        require_success("\r\r");
         for newline in VALID_NEWLINES {
             assert_eq!(
-                ignored_whitespace().parse(stream(newline)).into_output(),
+                inline_whitespace().parse(stream(newline)).into_output(),
                 None
+            );
+        }
+    }
+
+    #[test]
+    fn unsupported_whitespace_errors() {
+        #[track_caller]
+        fn require_failure_matching<'a, O>(
+            parser: impl StringParser<'a, O>,
+            text: &'a str,
+            matches: impl Fn(&RichReason<char>) -> bool,
+        ) -> ParseResult<&'a str, RichParseError<'a, char>> {
+            let res = parser.to_slice().parse(stream(text));
+            assert!(
+                res.has_errors(),
+                "Parsed without expected errors: res = {:?}, text = {text:?}",
+                res.output()
+            );
+            assert!(
+                res.errors().any(|e| matches(e.reason())),
+                "Actual parse errors don't match the expected result: {:?}",
+                res.clone().into_errors()
+            );
+            res
+        }
+        #[track_caller]
+        fn check_whitespace_failure<'a, O>(
+            parser: impl StringParser<'a, O>,
+            text: &'a str,
+            failing_chars: impl AsRef<[char]>,
+        ) {
+            let failing_chars = failing_chars.as_ref();
+            let should_be_expected: Vec<RichPattern<char>> = vec!['\t'.into(), ' '.into()];
+            let res = require_failure_matching(parser, text, |x| {
+                matches!(x, RichReason::ExpectedFound {
+                    found: Some(fc),
+                    expected,
+                } if failing_chars.contains(fc) && *expected == should_be_expected)
+            });
+            assert_eq!(
+                res.into_output(),
+                Some(text),
+                "Parse should succeed even with invalid whitespace"
+            )
+        }
+        let iws = inline_whitespace(); // primary parser being tested
+        let iws = &iws;
+        // use of \r is invalid without being preceded by \n
+        check_whitespace_failure(iws, "\r", ['\r']);
+        check_whitespace_failure(iws, "\r", ['\r']);
+        check_whitespace_failure(iws, " \r", ['\r']);
+        const UNSUPPORTED_WHITESPACE: &[char] = &[
+            '\x0b',   // vertical tab
+            '\x0C',   // form feed
+            '\u{A0}', // non-breaking space (latin1)
+        ];
+        for &invalid in UNSUPPORTED_WHITESPACE {
+            assert!(invalid.is_whitespace(), "{invalid:?}");
+            for s in [String::from(invalid), format!(" \t{invalid} \t")] {
+                check_whitespace_failure(inline_whitespace(), &s, [invalid]);
+            }
+            // if `\r` occurs in a newline, it should be parsed without issue
+            check_whitespace_failure(
+                single_inline_whitespace()
+                    .ignored()
+                    .or(ascii_newline().ignored())
+                    .repeated(),
+                &format!(" \r\n{invalid}\r\n\n"),
+                [invalid],
             );
         }
     }
