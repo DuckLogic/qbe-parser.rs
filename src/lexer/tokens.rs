@@ -199,7 +199,7 @@ macro_rules! define_keyword_enum {
     };
 }
 macro_rules! define_string_enum {
-    (enum $target:ident {
+    ($(#[$emeta:meta])* enum $target:ident {
         $($kw:ident ( $($inner:tt)* )),+ $(,)?
     }) => {
         paste3::paste! {
@@ -207,11 +207,11 @@ macro_rules! define_string_enum {
                 $(($($inner)*) => ($crate::lexer::$target::$kw);)*
             }
         }
-        define_string_enum!(@nomacro enum $target {
+        define_string_enum!(@nomacro $(#[$emeta])* enum $target {
             $($kw => stringify!($($inner)*)),*
         });
     };
-    (@nomacro enum $target:ident {
+    (@nomacro $(#[$emeta:meta])* enum $target:ident {
         // TODO: The `=>` should be neither `+`, nor `?`, but exactly once
         $($kw:ident => $text:expr),+ $(,)?
     }) => {
@@ -329,14 +329,47 @@ const _SHORT_TYPE_SPEC_USED: () = {
     let _ = ShortTypeSpec::parser;
     let _ = short_type_spec!(w);
 };
-define_string_enum!(enum Operator {
-    SingleEquals(=),
-    Colon(:),
-    Comma(,),
-    Plus(+),
-    ZeroInitMarker(z),
-    Ellipsis(...),
-});
+define_string_enum!(
+    /// Defines operators, the third main class of tokens besides [`Keyword`] and [`ShortTypeSpec`].
+    ///
+    /// # Symbols
+    /// Most operators are "symbols", which have two special behaviors when lexing.
+    ///
+    /// First, if exactly one of two consecutive tokens is a symbol,
+    /// then the spacing between the tokens can be omitted.
+    /// This means that `type=`, `=w`, `foo,` will lex as `type =`, `= w`, `foo ,`.
+    /// This behavior is by design and is described in the [spacing] section of the QBE reference.
+    ///
+    /// The only non-symbol that this rule clearly creates is ['z'](Operator::ZeroInitMarker),
+    /// as we don't want `zero` to parse as `z ero`.
+    ///
+    /// The second property is that symbols have higher lexer priority than all other tokens.
+    /// This is an implementation detail that would require a fair deal of work to resolve.
+    /// It means that `:` cannot be a symbol, as it could be confused with a type name.
+    ///
+    /// [spacing]: https://c9x.me/compile/doc/il.html#Spacing
+    enum Operator {
+        SingleEquals(=),
+        Colon(:),
+        Comma(,),
+        // The plus operator is not considered a symbol as it could be confused with numbers.
+        // This limitation would be straightforward to remove by special-casing digits.
+        Plus(+),
+        // TODO: Should this be an `Ident`?
+        ZeroInitMarker(z),
+        Ellipsis(...),
+    }
+);
+impl Operator {
+    /// Determine if this operator is a symbol for the purposes of lexing.
+    #[inline]
+    pub fn is_symbol(&self) -> bool {
+        !matches!(
+            self,
+            Operator::ZeroInitMarker | Operator::Colon | Operator::Plus
+        )
+    }
+}
 #[derive(thiserror::Error, Debug, Copy, Clone)]
 #[error("Keyword is not valid")]
 pub struct InvalidKeywordError;

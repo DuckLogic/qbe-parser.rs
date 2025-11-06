@@ -41,9 +41,35 @@ fn require_spacing<'a>() -> impl StringParser<'a, ()> {
         .rewind()
         .labelled("spacing")
 }
-/// Require either spacing or a comma.
+fn symbol<'a>() -> impl StringParser<'a, Operator> {
+    Operator::text_parser()
+        .filter(Operator::is_symbol)
+        .labelled("symbol")
+}
+fn delimiter<'a>() -> impl StringParser<'a, Token> {
+    macro_rules! delimiters {
+        ($($txt:literal => $variant:ident),+ $(,)?) => {
+            choice((
+                $(just($txt).to(Token::$variant),)*
+            ))
+        };
+    }
+    delimiters!(
+        "{" => OpenBrace,
+        "}" => CloseBrace,
+        "(" => OpenParen,
+        ")" => CloseParen,
+    )
+}
+/// Require either spacing or an operator.
+///
+/// This allows shorthand like `=w` and `field_def,`.
+/// It is still forbidden to have two operators joined together,
+/// but that is handled separately.
 fn require_space_like<'a>() -> impl StringParser<'a, ()> {
-    require_spacing().or(just(",").ignored().rewind())
+    require_spacing()
+        .or(symbol().ignored().or(delimiter().ignored()).rewind())
+        .labelled("spacing")
 }
 fn token<'a>() -> impl StringParser<'a, Token> {
     macro_rules! prefixed_idents {
@@ -60,11 +86,6 @@ fn token<'a>() -> impl StringParser<'a, Token> {
                 .map(|x| Token::$target($target::new(x.value, x.span)))
         });
     }
-    macro_rules! delimiter {
-        ($txt:literal => $variant:ident) => {
-            just($txt).to(Token::$variant)
-        };
-    }
     let prefixed_idents = prefixed_idents!(TypeName, GlobalName, TemporaryName, BlockName,);
     // A basic (not magic) token
     let basic_token = choice((
@@ -75,14 +96,13 @@ fn token<'a>() -> impl StringParser<'a, Token> {
             .map(Token::from)
             .labelled("type specifier"),
         prefixed_idents,
-        Operator::text_parser().map(Token::from),
+        Operator::text_parser()
+            .filter(|op| !op.is_symbol())
+            .map(Token::from),
         // must come after Operator since `z` is an operator
         ident().map(Token::Ident),
         string_literal().map(Token::StringLiteral),
-        delimiter!("{" => OpenBrace),
-        delimiter!("}" => CloseBrace),
-        delimiter!("(" => OpenParen),
-        delimiter!(")" => CloseParen),
+        delimiter(),
         one_of("+-")
             .or_not()
             .ignore_then(text::int(10))
@@ -102,9 +122,13 @@ fn token<'a>() -> impl StringParser<'a, Token> {
             })
             .labelled("integer"),
     ));
+    let forbidding_following_symbol = symbol().ignored().or(text::digits(10)); // may start a number
+    let symbol = symbol()
+        .then_ignore(forbidding_following_symbol.not().rewind())
+        .map(Token::from);
     let newline_token = ascii_newline().repeated().at_least(1).to(Token::Newline);
-    basic_token
-        .then_ignore(require_space_like())
+    symbol
+        .or(basic_token.then_ignore(require_space_like()))
         .or(newline_token)
         .labelled("token")
         .boxed()
@@ -447,16 +471,32 @@ mod test {
         );
     }
 
-    /// Ensures that tokens cannot be clumped together without triggering an error.
+    /// Ensures that tokens cannot be clumped together without spaces between them,
+    /// unless exactly one of them is an operator.
+    ///
+    /// This is required by the [spacing](https://c9x.me/compile/doc/il.html#Spacing) section
+    /// of the QBE IR specification.
+    /// The exception involving operators makes things like `=w` and `ident,` valid syntax.
     #[test]
-    fn clumped_tokens_error() {
-        fn check(text: &str) {
+    fn clumped_tokens() {
+        fn require_failure(text: &str) {
             let res = tokenize(text);
             assert!(res.is_err(), "{res:?}");
         }
-        check("===");
-        check("+-z");
-        check("type=");
+        require_failure("===");
+        require_failure("+-");
+        assert_eq!(
+            tokenize("=type").unwrap(),
+            tokens([operator!(=).to_token(), keyword!(type).into(),])
+        );
+        assert_eq!(
+            tokenize("type...").unwrap(),
+            tokens([keyword!(type).into(), operator!(...).to_token(),])
+        );
+        assert_eq!(
+            tokenize("type()").unwrap(),
+            tokens([keyword!(type).into(), Token::OpenParen, Token::CloseParen])
+        );
     }
 
     #[test]
