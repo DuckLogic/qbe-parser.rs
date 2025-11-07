@@ -1,6 +1,7 @@
 //! The core AST types.
 
 use chumsky::Parser;
+use compact_str::CompactString;
 use ordered_float::OrderedFloat;
 use std::borrow::Borrow;
 use std::fmt::{self, Debug, Display, Formatter, Write};
@@ -81,6 +82,11 @@ macro_rules! opaque_string_wrapper {
                 self.span
             }
         }
+        impl From<CompactString> for $target {
+            fn from(s: CompactString) -> Self {
+                $target::new(s, Span::MISSING)
+            }
+        }
         impl From<String> for $target {
             fn from(value: String) -> Self {
                 $target::new(value, Span::MISSING)
@@ -97,7 +103,7 @@ macro_rules! opaque_string_wrapper {
                 $target::new(value.0, value.1)
             }
         }
-        impl<T: Into<String>> From<Spanned<T>> for $target {
+        impl<T: Into<String> + Into<CompactString>> From<Spanned<T>> for $target {
             fn from(value: Spanned<T>) -> Self {
                 $target::new(value.value, value.span)
             }
@@ -108,13 +114,18 @@ macro_rules! opaque_string_wrapper {
 /// An identifier in the source code.
 #[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Ident {
-    text: String,
+    text: CompactString,
     span: Span,
 }
 impl Ident {
+    #[track_caller]
+    #[inline]
+    pub fn unspanned(text: impl Into<CompactString>) -> Self {
+        Self::new(text, Span::MISSING)
+    }
     #[inline]
     #[track_caller]
-    pub fn new(text: impl Into<String>, span: Span) -> Self {
+    pub fn new(text: impl Into<CompactString>, span: Span) -> Self {
         let text = text.into();
         let invalid_char = |c: char| panic!("Invalid char {c:?} at {span:?}");
         let mut chars = text.chars();
@@ -168,6 +179,7 @@ pub struct StringLiteral {
     span: Span,
 }
 impl StringLiteral {
+    #[inline]
     pub fn unspanned(text: impl Into<String>) -> Self {
         StringLiteral::new(text, Span::MISSING)
     }
