@@ -20,7 +20,7 @@ fn struct1_body() -> StructBody {
                 ty: BaseType::Long.into(),
                 repeated: Some(NumericLiteral::from(2)),
             },
-            field_def(TypeName::without_span("other")),
+            field_def(TypeName::unspanned("other")),
         ],
     }
 }
@@ -48,7 +48,7 @@ fn parse_struct() {
         .unwrap(),
         TypeDef {
             span: Span::MISSING,
-            name: TypeName::without_span("foo"),
+            name: TypeName::unspanned("foo"),
             body: TypeDefBody::Struct(struct1_body()),
             align: None,
         }
@@ -62,7 +62,7 @@ fn print_struct() {
             "{}",
             TypeDef {
                 span: Span::MISSING,
-                name: TypeName::without_span("hello"),
+                name: TypeName::unspanned("hello"),
                 align: None,
                 body: TypeDefBody::Struct(struct1_body())
             }
@@ -114,7 +114,7 @@ fn parse_union() {
         .unwrap(),
         TypeDef {
             span: Span::MISSING,
-            name: TypeName::without_span("hello"),
+            name: TypeName::unspanned("hello"),
             align: Some(AlignSpec {
                 span: Span::MISSING,
                 value: NumericLiteral::from(4)
@@ -131,7 +131,7 @@ fn print_union() {
             "{}",
             TypeDef {
                 span: Span::MISSING,
-                name: TypeName::without_span("hello"),
+                name: TypeName::unspanned("hello"),
                 align: None,
                 body: TypeDefBody::Union(union1_body())
             }
@@ -155,7 +155,7 @@ fn print_union() {
 fn opaque1() -> TypeDef {
     TypeDef {
         span: Span::MISSING,
-        name: TypeName::without_span("hello"),
+        name: TypeName::unspanned("hello"),
         align: Some(AlignSpec {
             value: 8.into(),
             span: Span::MISSING,

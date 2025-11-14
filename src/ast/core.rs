@@ -359,11 +359,8 @@ macro_rules! prefixed_ident_type {
                     snake_name.replace('_', " ").into_boxed_str()
                 })
             }
+            #[track_caller]
             pub fn unspanned(text: &str) -> Self {
-                Self::without_span(text)
-            }
-            // TODO: Deprecate in favor of unspanned
-            pub fn without_span(text: &str) -> Self {
                 Self {
                     ident: Ident::new(text, Span::MISSING),
                     span: Span::MISSING,

@@ -528,10 +528,10 @@ mod test {
         assert_eq!(
             tokenize(":foo $bar %baz @foo").unwrap(),
             vec![
-                TypeName::without_span("foo").into(),
-                GlobalName::without_span("bar").into(),
-                TemporaryName::without_span("baz").into(),
-                BlockName::without_span("foo").into(),
+                TypeName::unspanned("foo").into(),
+                GlobalName::unspanned("bar").into(),
+                TemporaryName::unspanned("baz").into(),
+                BlockName::unspanned("foo").into(),
             ]
         )
     }
