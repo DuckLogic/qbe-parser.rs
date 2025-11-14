@@ -346,7 +346,11 @@ impl Display for Span {
 }
 impl Debug for Span {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.is_missing() {
+        if f.alternate() {
+            // If we are doing alternate debug, omit the details from the span
+            // This way it doesn't show up in the diff of `similar_asserts::assert_eq`
+            f.debug_tuple("Span").finish_non_exhaustive()
+        } else if self.is_missing() {
             f.write_str("Span::MISSING")
         } else {
             write!(f, "Span({self})")
