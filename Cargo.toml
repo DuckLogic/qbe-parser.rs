@@ -16,6 +16,8 @@ paste3 = "1"
 arrayvec = "0.7"
 typed-builder = "0.23"
 smol_str = "0.3"
+line-index = "0.1"
+text-size = "1"
 
 # parsing
 chumsky = "0.11"

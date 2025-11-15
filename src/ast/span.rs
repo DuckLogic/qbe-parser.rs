@@ -1,8 +1,10 @@
+use line_index::LineCol;
 use std::cmp::Ordering;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Bound, Deref, Range, RangeBounds};
+use text_size::TextSize;
 
 /// An error that occurs when a [`Location`] or [`Span`] is missing.
 ///
@@ -525,6 +527,131 @@ impl From<ByteLocation> for Span {
     fn from(location: ByteLocation) -> Self {
         location.0.to_span()
     }
+}
+
+/// A [`Location`] resolved into line/column information.
+#[derive(Copy, Clone)]
+pub struct ResolvedLocation {
+    original: Location,
+    resolved: LineCol,
+}
+impl ResolvedLocation {
+    pub const MISSING: ResolvedLocation = ResolvedLocation {
+        original: Location::MISSING,
+        resolved: LineCol { line: 0, col: 0 },
+    };
+
+    #[inline]
+    pub fn is_missing(&self) -> bool {
+        self.original.is_missing()
+    }
+    #[inline]
+    pub fn line(&self) -> Result<u64, MissingLocationError> {
+        if !self.is_missing() {
+            Ok(u64::from(self.resolved.line).strict_add(1))
+        } else {
+            Err(MissingLocationError)
+        }
+    }
+    #[inline]
+    pub fn column(&self) -> Result<u64, MissingLocationError> {
+        if !self.is_missing() {
+            Ok(self.resolved.col.into())
+        } else {
+            Err(MissingLocationError)
+        }
+    }
+    #[inline]
+    pub fn to_location(&self) -> Location {
+        self.original
+    }
+}
+impl Debug for ResolvedLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.is_missing() {
+            f.write_str("ResolvedLocation::MISSING")
+        } else {
+            f.debug_struct("ResolvedLocation")
+                .field("byte_offset", &self.original.byte_offset().unwrap())
+                .field("line", &self.line().unwrap())
+                .field("column", &self.column().unwrap())
+                .finish()
+        }
+    }
+}
+impl Display for ResolvedLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.is_missing() {
+            f.write_str("ResolvedLocation::MISSING")
+        } else {
+            write!(f, "{}:{}", self.line().unwrap(), self.column().unwrap())
+        }
+    }
+}
+#[derive(Copy, Clone, Debug)]
+pub struct ResolvedSpan {
+    start: ResolvedLocation,
+    end: ResolvedLocation,
+}
+impl ResolvedSpan {
+    #[inline]
+    pub fn is_missing(&self) -> bool {
+        self.start.is_missing() || self.end.is_missing()
+    }
+    pub fn to_span(&self) -> Span {
+        Span::new(self.start.to_location(), self.end.to_location())
+    }
+}
+impl Display for ResolvedSpan {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.is_missing() {
+            f.write_str("ResolvedSpan::MISSING")
+        } else {
+            write!(f, "{}..", self.start)?;
+            if self.start.line() != self.end.line() {
+                write!(f, "{}:", self.end.line().unwrap())?;
+            }
+            write!(f, "{}", self.end.column().unwrap())
+        }
+    }
+}
+pub struct LocationIndex {
+    line_index: line_index::LineIndex,
+}
+impl LocationIndex {
+    pub fn new(text: &str) -> Self {
+        LocationIndex {
+            line_index: line_index::LineIndex::new(text),
+        }
+    }
+    pub fn resolve(&self, span: Span) -> Result<ResolvedSpan, LocationResolveError> {
+        Ok(ResolvedSpan {
+            start: self.resolve_location(span.start())?,
+            end: self.resolve_location(span.end())?,
+        })
+    }
+    pub fn resolve_location(
+        &self,
+        loc: Location,
+    ) -> Result<ResolvedLocation, LocationResolveError> {
+        let Ok(byte_offset) = loc.byte_offset() else {
+            return Ok(ResolvedLocation::MISSING);
+        };
+        let byte_offset = u32::try_from(byte_offset).map_err(|_| LocationResolveError {
+            location: loc,
+            _reason_overflowed_a_usize: (),
+        })?;
+        Ok(ResolvedLocation {
+            original: Location::from_byte(byte_offset),
+            resolved: self.line_index.line_col(TextSize::new(byte_offset)),
+        })
+    }
+}
+#[derive(Debug, thiserror::Error)]
+#[error("Cannot resolve {location}: overflowed a usize")]
+pub struct LocationResolveError {
+    location: Location,
+    _reason_overflowed_a_usize: (),
 }
 
 mod sealed {
