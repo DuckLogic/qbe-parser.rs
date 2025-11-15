@@ -249,6 +249,10 @@ pub struct TypeDef {
     pub body: TypeDefBody,
 }
 impl TypeDef {
+    // dummy method for enum getter
+    pub(super) fn span(&self) -> Span {
+        self.span
+    }
     fn print(&self, out: &mut IndentedPrinter<'_>) -> fmt::Result {
         write!(out, "type {} = ", self.name)?;
         if let Some(ref align) = self.align {

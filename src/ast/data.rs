@@ -21,6 +21,10 @@ pub struct DataDef {
     pub fields: Vec<DataField>,
 }
 impl DataDef {
+    // dummy method for enum getter
+    pub(crate) fn span(&self) -> Span {
+        self.span
+    }
     fn print(&self, out: &mut IndentedPrinter) -> fmt::Result {
         if self.linkage != Linkage::default() {
             write!(out, "{} ", self.linkage)?;

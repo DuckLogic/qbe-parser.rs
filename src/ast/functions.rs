@@ -34,6 +34,10 @@ pub struct FunctionDef {
     pub body: FunctionBody,
 }
 impl FunctionDef {
+    // dummy method for enum getter
+    pub(crate) fn span(&self) -> Span {
+        self.span
+    }
     pub fn validate(&self) -> Result<(), Vec<InvalidFunctionReason>> {
         let mut res = Vec::new();
         for (index, param) in self.params.iter().enumerate() {
