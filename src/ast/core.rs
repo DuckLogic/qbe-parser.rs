@@ -4,6 +4,7 @@ use chumsky::Parser;
 use compact_str::CompactString;
 use ordered_float::OrderedFloat;
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter, Write};
 use std::hash::Hash;
 use std::ops::Deref;
@@ -82,8 +83,8 @@ macro_rules! opaque_string_wrapper {
                 self.span
             }
         }
-        impl From<CompactString> for $target {
-            fn from(s: CompactString) -> Self {
+        impl From<AstString> for $target {
+            fn from(s: AstString) -> Self {
                 $target::new(s, Span::MISSING)
             }
         }
@@ -97,13 +98,13 @@ macro_rules! opaque_string_wrapper {
                 $target::new(value, Span::MISSING)
             }
         }
-        impl From<(String, Span)> for $target {
+        impl From<(AstString, Span)> for $target {
             #[inline]
-            fn from(value: (String, Span)) -> Self {
+            fn from(value: (AstString, Span)) -> Self {
                 $target::new(value.0, value.1)
             }
         }
-        impl<T: Into<String> + Into<CompactString>> From<Spanned<T>> for $target {
+        impl<T: Into<AstString>> From<Spanned<T>> for $target {
             fn from(value: Spanned<T>) -> Self {
                 $target::new(value.value, value.span)
             }
@@ -114,18 +115,18 @@ macro_rules! opaque_string_wrapper {
 /// An identifier in the source code.
 #[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Ident {
-    text: CompactString,
+    text: AstString,
     span: Span,
 }
 impl Ident {
     #[track_caller]
     #[inline]
-    pub fn unspanned(text: impl Into<CompactString>) -> Self {
+    pub fn unspanned(text: impl Into<AstString>) -> Self {
         Self::new(text, Span::MISSING)
     }
     #[inline]
     #[track_caller]
-    pub fn new(text: impl Into<CompactString>, span: Span) -> Self {
+    pub fn new(text: impl Into<AstString>, span: Span) -> Self {
         let text = text.into();
         let invalid_char = |c: char| panic!("Invalid char {c:?} at {span:?}");
         let mut chars = text.chars();
@@ -175,16 +176,16 @@ impl Parse for Ident {
 /// A quoted string literal.
 #[derive(Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct StringLiteral {
-    text: String,
+    text: AstString,
     span: Span,
 }
 impl StringLiteral {
     #[inline]
-    pub fn unspanned(text: impl Into<String>) -> Self {
+    pub fn unspanned(text: impl Into<AstString>) -> Self {
         StringLiteral::new(text, Span::MISSING)
     }
     #[inline]
-    pub fn new(text: impl Into<String>, span: Span) -> Self {
+    pub fn new(text: impl Into<AstString>, span: Span) -> Self {
         StringLiteral {
             text: text.into(),
             span,
@@ -416,3 +417,75 @@ prefixed_ident_type!(TypeName, PREFIX = ':', DESC = "type name");
 prefixed_ident_type!(GlobalName, PREFIX = '$', DESC = "global name");
 prefixed_ident_type!(TemporaryName, PREFIX = '%', DESC = "temporary name");
 prefixed_ident_type!(BlockName, PREFIX = '@', DESC = "block name");
+
+/// An owned string used by the AST.
+///
+/// This is semantically equivalent to the [`String`] type,
+/// but cannot be directly mutated and has different performance characteristics.
+#[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct AstString(CompactString);
+impl AstString {
+    /// Create an [`AstString`] from a static string.
+    ///
+    /// This may be able to avoid allocation that would be required when using the [`From`] impl.
+    /// However, this is not guaranteed.
+    #[inline]
+    pub fn from_static(s: &'static str) -> AstString {
+        AstString(CompactString::const_new(s))
+    }
+    #[inline]
+    pub fn as_str(&self) -> &'_ str {
+        self.0.as_str()
+    }
+}
+impl From<String> for AstString {
+    #[inline]
+    fn from(s: String) -> Self {
+        AstString(s.into())
+    }
+}
+impl From<&str> for AstString {
+    #[inline]
+    fn from(s: &str) -> Self {
+        AstString(s.into())
+    }
+}
+impl From<AstString> for String {
+    #[inline]
+    fn from(value: AstString) -> Self {
+        value.0.into()
+    }
+}
+impl Debug for AstString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        <str as Debug>::fmt(&self.0, f)
+    }
+}
+impl Display for AstString {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+impl Deref for AstString {
+    type Target = str;
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+impl Borrow<str> for AstString {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.0.as_str()
+    }
+}
+impl equivalent::Equivalent<String> for AstString {
+    fn equivalent(&self, other: &String) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+impl equivalent::Comparable<String> for AstString {
+    fn compare(&self, key: &String) -> Ordering {
+        self.as_str().cmp(key.as_str())
+    }
+}

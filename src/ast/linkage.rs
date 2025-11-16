@@ -1,4 +1,4 @@
-use crate::ast::{Span, StringLiteral};
+use crate::ast::{AstString, Span, StringLiteral};
 use crate::lexer::{TokenParser, keyword};
 use crate::parse::{Parse, impl_fromstr_via_parse, maybe_newline};
 use arrayvec::ArrayVec;
@@ -202,7 +202,7 @@ impl LinkageBuilder {
     /// # Panics
     /// Will panic if a section has already been specified.
     #[track_caller]
-    pub fn with_simple_section(&mut self, name: impl Into<String>) -> &mut Self {
+    pub fn with_simple_section(&mut self, name: impl Into<AstString>) -> &mut Self {
         self.with_specifier(LinkageSection {
             span: Span::MISSING,
             name: StringLiteral::unspanned(name),
@@ -216,8 +216,8 @@ impl LinkageBuilder {
     #[track_caller]
     pub fn with_section_and_flags(
         &mut self,
-        name: impl Into<String>,
-        flags: impl Into<String>,
+        name: impl Into<AstString>,
+        flags: impl Into<AstString>,
     ) -> &mut Self {
         self.with_specifier(LinkageSection {
             span: Span::MISSING,
