@@ -8,15 +8,11 @@ use std::fmt::{self, Display, Formatter, Write};
 use crate::print::{IndentedPrinter, impl_display_via_print};
 use chumsky::prelude::*;
 
-#[derive(Debug, Eq, PartialEq, Hash, Clone, typed_builder::TypedBuilder)]
-#[non_exhaustive]
+#[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct DataDef {
-    #[builder(default)]
     pub span: Span,
-    #[builder(default)]
     pub linkage: Linkage,
     pub name: GlobalName,
-    #[builder(default, setter(strip_option))]
     pub align: Option<AlignSpec>,
     pub fields: Vec<DataField>,
 }

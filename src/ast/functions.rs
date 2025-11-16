@@ -15,21 +15,12 @@ mod parse;
 #[cfg(test)]
 mod test;
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash, typed_builder::TypedBuilder)]
-#[non_exhaustive]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FunctionDef {
-    #[builder(default)]
     pub span: Span,
-    #[builder(default)]
     pub linkage: Linkage,
-    #[builder(default, setter(strip_option, into))]
     pub return_type: Option<AbiType>,
     pub name: GlobalName,
-    #[builder(default, mutators(
-        fn add_param(&mut self, param: impl Into<ParamDef>) {
-            self.params.push(param.into());
-        }
-    ))]
     pub params: Vec<ParamDef>,
     pub body: FunctionBody,
 }
@@ -181,15 +172,11 @@ impl FunctionBody {
     }
 }
 impl_display_via_print!(FunctionBody);
-#[derive(Clone, Debug, Eq, PartialEq, Hash, typed_builder::TypedBuilder)]
-#[non_exhaustive]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct FunctionBlock {
-    #[builder(default)]
     pub span: Span,
     pub label: BlockName,
-    #[builder(default)]
     pub phis: Vec<PhiInstruction>,
-    #[builder(default)]
     pub instructions: Vec<RegularInstruction>,
     pub terminator: Option<JumpInstruction>,
 }
@@ -211,7 +198,7 @@ impl FunctionBlock {
     }
 }
 impl_display_via_print!(FunctionBlock);
-#[derive(Clone, Debug, Eq, PartialEq, Hash, typed_builder::TypedBuilder)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct PhiInstruction {
     pub span: Span,
     pub dest_info: InsnDestInfo,
