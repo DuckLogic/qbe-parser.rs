@@ -1,8 +1,8 @@
 //! The core AST types.
 
 use chumsky::Parser;
-use compact_str::CompactString;
 use ordered_float::OrderedFloat;
+use smol_str::SmolStr;
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Display, Formatter, Write};
@@ -423,7 +423,7 @@ prefixed_ident_type!(BlockName, PREFIX = '@', DESC = "block name");
 /// This is semantically equivalent to the [`String`] type,
 /// but cannot be directly mutated and has different performance characteristics.
 #[derive(Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct AstString(CompactString);
+pub struct AstString(SmolStr);
 impl AstString {
     /// Create an [`AstString`] from a static string.
     ///
@@ -431,7 +431,7 @@ impl AstString {
     /// However, this is not guaranteed.
     #[inline]
     pub fn from_static(s: &'static str) -> AstString {
-        AstString(CompactString::const_new(s))
+        AstString(SmolStr::new_static(s))
     }
     #[inline]
     pub fn as_str(&self) -> &'_ str {

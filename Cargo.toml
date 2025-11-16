@@ -15,7 +15,7 @@ unicode-ident = "1"
 paste3 = "1"
 arrayvec = "0.7"
 typed-builder = "0.23"
-compact_str = "0.9"
+smol_str = "0.3"
 
 # parsing
 chumsky = "0.11"
