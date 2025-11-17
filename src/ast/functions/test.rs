@@ -1,7 +1,8 @@
+use crate::ast::data::Constant;
 use crate::ast::functions::{
-    FunctionBlock, FunctionBody, FunctionDef, InsnDestInfo, JumpInstruction, ParamDef, PhiArg,
-    PhiInstruction, RegularInstruction, RegularParamDef, SimpleInstruction, SimpleInstructionArgs,
-    Value, VariadicParamDef,
+    CallArgument, CallInstruction, FunctionBlock, FunctionBody, FunctionDef, InsnDestInfo,
+    JumpInstruction, ParamDef, PhiArg, PhiInstruction, RegularCallArgument, RegularInstruction,
+    RegularParamDef, SimpleInstruction, SimpleInstructionArgs, Value, VariadicParamDef,
 };
 use crate::ast::linkage::Linkage;
 use crate::ast::types::BaseType;
@@ -137,6 +138,36 @@ fn variadic_add3() -> FunctionDef {
                             dest: TemporaryName::unspanned("ap"),
                         }),
                         args: SimpleInstructionArgs::from([32.into()]),
+                    }
+                    .into(),
+                    SimpleInstruction {
+                        span: Span::MISSING,
+                        dest_info: None,
+                        name: Ident::unspanned("vastart"),
+                        args: SimpleInstructionArgs::from([TemporaryName::unspanned("ap").into()]),
+                    }
+                    .into(),
+                    CallInstruction {
+                        span: Span::MISSING,
+                        dest_info: Some(InsnDestInfo {
+                            span: Span::MISSING,
+                            ty: BaseType::Single,
+                            dest: TemporaryName::unspanned("r"),
+                        }),
+                        target: Value::Constant(Constant::SymbolRef(GlobalName::unspanned("vadd"))),
+                        call_kw_span: Span::MISSING,
+                        args: vec![
+                            CallArgument::Regular(RegularCallArgument {
+                                ty: BaseType::Single.into(),
+                                value: TemporaryName::unspanned("a").into(),
+                                span: Span::MISSING,
+                            }),
+                            CallArgument::Regular(RegularCallArgument {
+                                ty: BaseType::Long.into(),
+                                value: TemporaryName::unspanned("ap").into(),
+                                span: Span::MISSING,
+                            }),
+                        ],
                     }
                     .into(),
                 ],

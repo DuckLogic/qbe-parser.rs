@@ -1,8 +1,9 @@
 use crate::ast::data::Constant;
 use crate::ast::functions::{
-    EnvironmentParamDef, FunctionBlock, FunctionBody, FunctionDef, InsnDestInfo, JumpInstruction,
-    JumpInstructionKind, ParamDef, PhiArg, PhiInstruction, RegularInstruction, RegularParamDef,
-    SimpleInstruction, SimpleInstructionArgs, ThreadLocalRef, Value, VariadicParamDef,
+    CallArgument, CallInstruction, EnvironmentParamDef, FunctionBlock, FunctionBody, FunctionDef,
+    InsnDestInfo, JumpInstruction, JumpInstructionKind, ParamDef, PhiArg, PhiInstruction,
+    RegularCallArgument, RegularInstruction, RegularParamDef, SimpleInstruction,
+    SimpleInstructionArgs, ThreadLocalRef, Value, VariadicParamDef,
 };
 use crate::ast::linkage::Linkage;
 use crate::ast::types::{AbiType, BaseType};
@@ -114,7 +115,7 @@ impl Parse for RegularParamDef {
 impl Parse for EnvironmentParamDef {
     const DESC: &'static str = "environment parameter";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        operator!(...)
+        keyword!(env)
             .parser()
             .ignore_then(TemporaryName::parser())
             .map_with(|name, extra| EnvironmentParamDef {
@@ -269,9 +270,11 @@ impl Parse for PhiArg {
 impl Parse for RegularInstruction {
     const DESC: &'static str = "regular instruction";
     fn parser<'a>() -> impl TokenParser<'a, Self> {
-        SimpleInstruction::parser()
-            .map(RegularInstruction::Simple)
-            .labelled(Self::DESC)
+        choice((
+            SimpleInstruction::parser().map(RegularInstruction::Simple),
+            CallInstruction::parser().map(RegularInstruction::Call),
+        ))
+        .labelled(Self::DESC)
     }
 }
 impl_fromstr_via_parse!(RegularInstruction);
@@ -298,6 +301,57 @@ impl Parse for SimpleInstruction {
     }
 }
 impl_fromstr_via_parse!(SimpleInstruction);
+impl Parse for CallInstruction {
+    const DESC: &'static str = "call instruction";
+    fn parser<'a>() -> impl TokenParser<'a, Self> {
+        let args = CallArgument::parser()
+            .separated_by(operator!(,).parser())
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::OpenParen), just(Token::CloseParen));
+        InsnDestInfo::parser()
+            .or_not()
+            .then(keyword!(call).parser().to_span())
+            .then(Value::parser())
+            .then(args)
+            .map_with(
+                |(((dest_info, call_kw_span), target), args), extra| CallInstruction {
+                    span: extra.span(),
+                    call_kw_span,
+                    target,
+                    args,
+                    dest_info,
+                },
+            )
+    }
+}
+impl Parse for CallArgument {
+    const DESC: &'static str = "call argument";
+    fn parser<'a>() -> impl TokenParser<'a, Self> {
+        choice((
+            RegularCallArgument::parser().map(CallArgument::Regular),
+            keyword!(env)
+                .parser()
+                .ignore_then(Value::parser())
+                .map(CallArgument::Environment),
+            operator!(...)
+                .parser()
+                .to_span()
+                .map(CallArgument::VariadicMarker),
+        ))
+    }
+}
+impl Parse for RegularCallArgument {
+    const DESC: &'static str = "regular call argument";
+    fn parser<'a>() -> impl TokenParser<'a, Self> {
+        AbiType::parser()
+            .then(Value::parser())
+            .map_with(|(ty, value), extra| RegularCallArgument {
+                ty,
+                value,
+                span: extra.span(),
+            })
+    }
+}
 impl Parse for InsnDestInfo {
     const DESC: &'static str = "instruction destination";
     fn parser<'a>() -> impl TokenParser<'a, Self> {

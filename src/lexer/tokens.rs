@@ -301,6 +301,7 @@ define_keyword_enum!(
         Align,
         Call,
         Data,
+        Env,
         Export,
         Function,
         Hlt,

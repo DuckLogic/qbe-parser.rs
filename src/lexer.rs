@@ -107,7 +107,6 @@ fn token<'a>() -> impl StringParser<'a, Token> {
         // must come after Operator since `z` is an operator
         ident().map(Token::Ident),
         string_literal().map(Token::StringLiteral),
-        delimiter(),
         one_of("+-")
             .or_not()
             .ignore_then(text::int(10))
@@ -133,6 +132,7 @@ fn token<'a>() -> impl StringParser<'a, Token> {
         .map(Token::from);
     let newline_token = ascii_newline().repeated().at_least(1).to(Token::Newline);
     symbol
+        .or(delimiter())
         .or(basic_token.then_ignore(require_space_like()))
         .or(newline_token)
         .labelled("token")

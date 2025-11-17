@@ -357,17 +357,29 @@ regular_insn_common!(CallInstruction);
 /// An argument to a [`CallInstruction`].
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum CallArgument {
-    Value(Value),
+    Regular(RegularCallArgument),
     Environment(Value),
     VariadicMarker(Span),
 }
 impl Display for CallArgument {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            CallArgument::Value(value) => Display::fmt(value, f),
+            CallArgument::Regular(inner) => Display::fmt(inner, f),
             CallArgument::Environment(value) => write!(f, "env {value}"),
             CallArgument::VariadicMarker(_) => f.write_str("..."),
         }
+    }
+}
+/// A regular [`CallArgument`], including both a value and its type.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct RegularCallArgument {
+    pub span: Span,
+    pub ty: AbiType,
+    pub value: Value,
+}
+impl Display for RegularCallArgument {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.ty, self.value)
     }
 }
 
