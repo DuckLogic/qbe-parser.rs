@@ -2,8 +2,8 @@ use crate::ast::data::Constant;
 use crate::ast::functions::{
     CallArgument, CallInstruction, EnvironmentParamDef, FunctionBlock, FunctionBody, FunctionDef,
     InsnDestInfo, JumpInstruction, JumpInstructionKind, ParamDef, PhiArg, PhiInstruction,
-    RegularCallArgument, RegularInstruction, RegularParamDef, SimpleInstruction,
-    SimpleInstructionArgs, ThreadLocalRef, Value, VariadicParamDef,
+    RegularCallArgument, RegularInstruction, RegularParamDef, SimpleInstruction, ThreadLocalRef,
+    Value, VariadicParamDef,
 };
 use crate::ast::linkage::Linkage;
 use crate::ast::types::{AbiType, BaseType};
@@ -284,10 +284,8 @@ impl Parse for SimpleInstruction {
         let values = Value::parser()
             .separated_by(operator!(,).parser())
             .at_least(1)
-            .at_most(SimpleInstructionArgs::LIMIT)
             .allow_trailing()
-            .collect::<Vec<_>>()
-            .map(|values| SimpleInstructionArgs::try_from(&*values).unwrap());
+            .collect::<Vec<_>>();
         InsnDestInfo::parser()
             .or_not()
             .then(Ident::parser())

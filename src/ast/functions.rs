@@ -1,4 +1,3 @@
-pub use self::args::SimpleInstructionArgs;
 use crate::ast::data::Constant;
 use crate::ast::linkage::Linkage;
 use crate::ast::types::{AbiType, BaseType};
@@ -10,7 +9,6 @@ use std::fmt;
 use std::fmt::{Display, Formatter, Write};
 use std::str::FromStr;
 
-mod args;
 mod parse;
 #[cfg(test)]
 mod test;
@@ -284,7 +282,7 @@ impl_enum_display!(
 pub struct SimpleInstruction {
     pub span: Span,
     pub dest_info: Option<InsnDestInfo>,
-    pub args: SimpleInstructionArgs,
+    pub args: Vec<Value>,
     pub name: Ident,
 }
 impl SimpleInstruction {

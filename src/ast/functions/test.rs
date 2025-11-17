@@ -2,7 +2,7 @@ use crate::ast::data::Constant;
 use crate::ast::functions::{
     CallArgument, CallInstruction, FunctionBlock, FunctionBody, FunctionDef, InsnDestInfo,
     JumpInstruction, ParamDef, PhiArg, PhiInstruction, RegularCallArgument, RegularInstruction,
-    RegularParamDef, SimpleInstruction, SimpleInstructionArgs, Value, VariadicParamDef,
+    RegularParamDef, SimpleInstruction, Value, VariadicParamDef,
 };
 use crate::ast::linkage::Linkage;
 use crate::ast::types::BaseType;
@@ -56,10 +56,7 @@ fn loop_func() -> FunctionDef {
                             dest: TemporaryName::unspanned("x1"),
                             ty: BaseType::Word,
                         }),
-                        args: SimpleInstructionArgs::from([
-                            TemporaryName::unspanned("x").into(),
-                            Value::from(1),
-                        ]),
+                        args: vec![TemporaryName::unspanned("x").into(), Value::from(1)],
                         name: Ident::unspanned("sub"),
                     })],
                     terminator: Some(JumpInstruction::JumpNonZero {
@@ -137,14 +134,14 @@ fn variadic_add3() -> FunctionDef {
                             ty: BaseType::Long,
                             dest: TemporaryName::unspanned("ap"),
                         }),
-                        args: SimpleInstructionArgs::from([32.into()]),
+                        args: vec![32.into()],
                     }
                     .into(),
                     SimpleInstruction {
                         span: Span::MISSING,
                         dest_info: None,
                         name: Ident::unspanned("vastart"),
-                        args: SimpleInstructionArgs::from([TemporaryName::unspanned("ap").into()]),
+                        args: vec![TemporaryName::unspanned("ap").into()],
                     }
                     .into(),
                     CallInstruction {
