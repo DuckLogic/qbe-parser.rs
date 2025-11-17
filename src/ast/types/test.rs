@@ -52,7 +52,7 @@ fn parse_struct() {
             body: TypeDefBody::Struct(struct1_body()),
             align: None,
         }
-    )
+    );
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn print_struct() {
             }
         "}
         .trim_end()
-    )
+    );
 }
 
 fn union1_body() -> UnionBody {
@@ -121,7 +121,7 @@ fn parse_union() {
             }),
             body: TypeDefBody::Union(union1_body()),
         }
-    )
+    );
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn print_union() {
             }
         "}
         .trim_end()
-    )
+    );
 }
 
 fn opaque1() -> TypeDef {
@@ -172,10 +172,10 @@ fn parse_opaque_type() {
     assert_eq!(
         "type :hello = align 8 { 12 }".parse::<TypeDef>().unwrap(),
         opaque1(),
-    )
+    );
 }
 
 #[test]
 fn print_opaque_type() {
-    assert_eq!(format!("{}", opaque1()), "type :hello = align 8 { 12 }")
+    assert_eq!(format!("{}", opaque1()), "type :hello = align 8 { 12 }");
 }

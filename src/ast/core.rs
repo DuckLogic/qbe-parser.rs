@@ -131,6 +131,14 @@ impl Ident {
     pub fn unspanned(text: impl Into<AstString>) -> Self {
         Self::new(text, Span::MISSING)
     }
+    /// Create an identifier from a string.
+    ///
+    /// This accepts keywords without errors.
+    /// Using the `From<Keyword>` implementation does the same thing,
+    /// but more explicitly.
+    ///
+    /// # Panics
+    /// If the characters are not valid, this will panic.
     #[inline]
     #[track_caller]
     pub fn new(text: impl Into<AstString>, span: Span) -> Self {
@@ -139,20 +147,22 @@ impl Ident {
         let first = chars
             .next()
             .unwrap_or_else(|| panic!("Identifier is empty at {span:?}"));
-        if !is_xid_start(first) {
-            panic!("Invalid start char {first:?} for ident at {span:?}")
-        }
+        assert!(
+            is_xid_start(first),
+            "Invalid start char {first:?} for ident at {span:?}"
+        );
         for other in chars {
-            if !is_xid_continue(other) {
-                panic!("Invalid char {other:?} for ident at {span:?}")
-            }
+            assert!(
+                is_xid_continue(other),
+                "Invalid char {other:?} for ident at {span:?}"
+            );
         }
         if let Ok(byte_len) = span.byte_len() {
             assert_eq!(
                 byte_len,
                 text.len() as u64,
                 "Length of span {span} doesn't match {text:?}"
-            )
+            );
         }
         Ident { text, span }
     }

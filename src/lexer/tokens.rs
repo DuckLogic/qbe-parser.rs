@@ -188,11 +188,11 @@ const _TOKEN_USED: () = {
 };
 
 macro_rules! define_keyword_enum {
-    (enum $target:ident {
+    ($evis:vis enum $target:ident {
         $($kw:ident),+ $(,)?
     }) => {
         paste3::paste! {
-            define_string_enum!(enum $target {
+            define_string_enum!($evis enum $target {
                 $($kw([<$kw:snake>])),*
             });
         }

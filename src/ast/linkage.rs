@@ -115,7 +115,7 @@ impl Linkage {
         for entry in &self.specifiers {
             if entry.kind() == kind {
                 assert!(res.is_none(), "Internal Error: Duplicate {kind:?} entries");
-                res = Some(entry)
+                res = Some(entry);
             }
         }
         res
@@ -462,7 +462,7 @@ mod test {
                 .with_thread()
                 .with_section_and_flags("foo", "flags")
                 .build(),
-        )
+        );
     }
 
     #[test]

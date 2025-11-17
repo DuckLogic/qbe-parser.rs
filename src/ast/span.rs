@@ -129,7 +129,7 @@ impl Default for Location {
 
 /// References a range of bytes in the original source file.
 ///
-/// Can be ["missing"](Span::MISSING),
+/// Can be [missing](Span::MISSING),
 /// in which case doesn't correspond to any actual portion of the source file.
 /// This is the [`Default`] value.
 ///
@@ -168,9 +168,7 @@ impl Span {
     #[track_caller]
     pub fn new(start: Location, end: Location) -> Span {
         // don't use assert! because missing locations will return false
-        if start > end {
-            panic!("start > end: {start} > {end}");
-        }
+        assert!(start <= end, "start > end: {start} > {end}");
         Span { start, end }
     }
 
@@ -566,6 +564,7 @@ impl ResolvedLocation {
         self.original
     }
 }
+#[allow(clippy::missing_fields_in_debug, reason = "intentional")]
 impl Debug for ResolvedLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.is_missing() {

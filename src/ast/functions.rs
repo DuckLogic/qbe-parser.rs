@@ -36,14 +36,14 @@ impl FunctionDef {
                     if index > 0 {
                         res.push(InvalidFunctionReason::EnvironmentParamMustComeFirst {
                             span: param.span(),
-                        })
+                        });
                     }
                 }
                 ParamDef::Variadic(_) => {
                     if index < self.params.len() - 1 {
                         res.push(InvalidFunctionReason::VariadicParamMustComeLast {
                             span: param.span(),
-                        })
+                        });
                     }
                 }
             }
@@ -511,7 +511,7 @@ impl Display for JumpInstruction {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             JumpInstruction::Jump { span: _, target } => {
-                write!(f, "jmp {}", target)
+                write!(f, "jmp {target}")
             }
             JumpInstruction::JumpNonZero {
                 span: _,
@@ -547,7 +547,7 @@ impl Display for UnknownInstructionNameError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Unknown")?;
         if let Some(kind) = self.kind_desc {
-            write!(f, " {}", kind)?;
+            write!(f, " {kind}")?;
         }
         write!(f, " instruction name: {:?}", self.name)
     }

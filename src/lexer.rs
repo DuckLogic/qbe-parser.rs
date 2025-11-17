@@ -173,7 +173,7 @@ fn floating_point_value<'a>() -> impl StringParser<'a, NumericLiteral<OrderedFlo
 }
 /// Parse a single ASCII newline.
 ///
-/// Unlike text::newline, this only accepts ASCII newline operators
+/// Unlike [`text::newline`], this only accepts ASCII newline operators
 /// that would be recognized by [`str::lines`] ("\r\n" and "\n").
 ///
 /// TODO: Contribute this to chumsky?
@@ -410,7 +410,7 @@ mod test {
                 res.into_output(),
                 Some(text),
                 "Parse should succeed even with invalid whitespace"
-            )
+            );
         }
         let iws = inline_whitespace(); // primary parser being tested
         let iws = &iws;
@@ -466,7 +466,7 @@ mod test {
                 keyword!(type).into(),
                 Token::Newline,
             ])
-        )
+        );
     }
 
     #[test]
@@ -527,7 +527,7 @@ mod test {
         assert_eq!(
             tokenize("d_5.8 s_1.0").unwrap(),
             tokens([double(5.8), single(1.0)])
-        )
+        );
     }
 
     #[test]
@@ -540,7 +540,7 @@ mod test {
                 TemporaryName::unspanned("baz").into(),
                 BlockName::unspanned("foo").into(),
             ]
-        )
+        );
     }
 
     #[test]
@@ -567,6 +567,6 @@ mod test {
                 operator!(,).into(),
                 Token::Number(1.into()),
             ]
-        )
+        );
     }
 }

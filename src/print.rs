@@ -60,7 +60,7 @@ impl<'a> IndentedPrinter<'a> {
     fn flush(&mut self) -> fmt::Result {
         if !self.buffer.is_empty() {
             self.output.write_str(&self.buffer)?;
-            self.buffer.clear()
+            self.buffer.clear();
         }
         Ok(())
     }
